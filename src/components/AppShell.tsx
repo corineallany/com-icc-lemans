@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { FinanceCorrectionShortcut } from "@/components/FinanceCorrectionShortcut";
+import { FinanceSettingsShortcut } from "@/components/FinanceSettingsShortcut";
 import { IccHeader } from "@/components/IccHeader";
 
 /**
@@ -39,6 +40,7 @@ export function AppShell({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {actions}
+            {title === "Caisse fraternelle" ? <FinanceSettingsShortcut /> : null}
             {title === "Caisse fraternelle" ? <FinanceCorrectionShortcut /> : null}
             <button type="button" onClick={goBack} className="text-xs font-bold text-icc-violet hover:underline">
               ← Retour
