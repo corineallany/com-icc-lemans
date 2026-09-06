@@ -132,7 +132,7 @@ const MODULES: ModuleDef[] = [
     description: "Modèles de programmes et paramètres réutilisables.",
     actions: [
       ["consulter", "Consulter"],
-      ["gerer", "Créer / modifier / archiver"],
+      ["gerer", "Autoriser la création / modification / archivage"],
     ],
   },
   {
@@ -322,6 +322,7 @@ export function AccessRightsPanel() {
       toast.success("Droits enregistrés");
       setDirty(false);
       await qc.invalidateQueries({ queryKey: ["access-role-permissions"] });
+      await qc.invalidateQueries({ queryKey: ["program-editor-permissions"] });
     },
     onError: (e: any) => toast.error("Enregistrement impossible", { description: e.message }),
   });

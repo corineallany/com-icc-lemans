@@ -15,12 +15,16 @@ CREATE OR REPLACE FUNCTION public.generate_program_occurrences(p_program_id text
 RETURNS integer LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE src public.programs%rowtype; d date; delta integer; nid text; n integer:=0;
 a record; am record; dayrow record; slotrow record; na uuid; nm uuid; nd uuid; ns uuid;
-amap jsonb; mmap jsonb; dmap jsonb; smap jsonb;
+amap jsonb; mmap jsonb; dmap jsonb; smap jsonb; fallback_pole uuid; poles uuid[]; task_poles uuid[];
 BEGIN
  IF auth.uid() IS NULL OR NOT public.scope_allows_program(auth.uid(),'programmes','modifier',p_program_id) THEN RAISE EXCEPTION 'Accès refusé'; END IF;
  IF coalesce(cardinality(p_dates),0)>104 THEN RAISE EXCEPTION '104 occurrences maximum'; END IF;
  SELECT * INTO STRICT src FROM public.programs WHERE id=p_program_id FOR UPDATE;
  IF src.start_date IS NULL THEN RAISE EXCEPTION 'Date de début requise'; END IF;
+ SELECT array_agg(pole_id) INTO poles FROM public.program_assignments WHERE program_id=p_program_id;
+ IF cardinality(poles)=1 THEN fallback_pole:=poles[1]; END IF;
+ SELECT array_agg(coalesce(pole_id,fallback_pole)) INTO task_poles FROM public.tasks WHERE program_id=p_program_id;
+ PERFORM public.check_program_write_access(p_program_id,poles,task_poles,true);
  FOREACH d IN ARRAY coalesce(p_dates,'{}'::date[]) LOOP
   IF d IS NULL OR d<src.start_date THEN RAISE EXCEPTION 'Date invalide'; END IF;
   IF d=src.start_date THEN CONTINUE; END IF;
@@ -57,7 +61,7 @@ BEGIN
   SELECT (mmap->>s.assignment_member_id::text)::uuid,(dmap->>s.program_day_id::text)::uuid,(smap->>s.service_slot_id::text)::uuid,s.start_time,s.end_time
   FROM public.program_assignment_member_slots s WHERE mmap ? s.assignment_member_id::text;
   INSERT INTO public.tasks(title,detail,program_id,pole_id,assignee_member_id,due_date,priority,status,created_by)
-  SELECT title,detail,nid,pole_id,assignee_member_id,due_date+delta,priority,'todo',auth.uid() FROM public.tasks WHERE program_id=p_program_id;
+  SELECT title,detail,nid,coalesce(pole_id,fallback_pole),assignee_member_id,due_date+delta,priority,'todo',auth.uid() FROM public.tasks WHERE program_id=p_program_id;
   n:=n+1;
  END LOOP;
  RETURN n;
@@ -67,11 +71,18 @@ GRANT EXECUTE ON FUNCTION public.generate_program_occurrences(text,date[]) TO au
 
 CREATE OR REPLACE FUNCTION public.generate_model_programs(p_model_id text,p_dates date[])
 RETURNS text LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
-DECLARE m public.program_models%rowtype; nid text; pid text; t jsonb; d date; key text;
+DECLARE m public.program_models%rowtype; nid text; pid text; t jsonb; d date; key text; poles uuid[]; task_poles uuid[]; fallback_pole uuid; templates jsonb;
 BEGIN
- IF auth.uid() IS NULL OR NOT public.is_staff(auth.uid()) THEN RAISE EXCEPTION 'Accès refusé'; END IF;
+ IF auth.uid() IS NULL THEN RAISE EXCEPTION 'Reconnectez-vous pour continuer.'; END IF;
  IF coalesce(cardinality(p_dates),0)=0 OR cardinality(p_dates)>104 THEN RAISE EXCEPTION 'Dates requises (104 maximum)'; END IF;
- SELECT * INTO STRICT m FROM public.program_models WHERE id=p_model_id AND NOT archived AND NOT deleted FOR UPDATE;
+ SELECT * INTO STRICT m FROM public.program_models WHERE id=p_model_id AND NOT archived AND NOT deleted;
+ IF NOT public.can_manage_program_model(m.poles) THEN RAISE EXCEPTION 'Vous ne pouvez pas gérer ce modèle. Contactez la responsable pour vérifier vos droits sur les modèles.'; END IF;
+ PERFORM 1 FROM public.program_models WHERE id=p_model_id FOR UPDATE;
+ SELECT array_agg(value::uuid) INTO poles FROM jsonb_array_elements_text(m.poles);
+ IF cardinality(poles)=1 THEN fallback_pole:=poles[1]; END IF;
+ templates:=CASE WHEN jsonb_array_length(coalesce(m.task_templates,'[]'))>0 THEN m.task_templates ELSE coalesce((SELECT jsonb_agg(jsonb_build_object('title',value)) FROM jsonb_array_elements_text(m.checklist)), '[]') END;
+ SELECT array_agg(coalesce(nullif(value->>'pole_id','')::uuid,fallback_pole)) INTO task_poles FROM jsonb_array_elements(templates);
+ PERFORM public.check_program_write_access(NULL,poles,task_poles,true);
  d:=p_dates[1]; key:='model:'||m.id||':'||d::text;
  SELECT id INTO nid FROM public.programs WHERE creation_key=key;
  IF nid IS NULL THEN
@@ -85,9 +96,9 @@ BEGIN
    INSERT INTO public.program_assignments(program_id,pole_id,tasks,required_count,assignment_rule)
    VALUES(nid,pid::uuid,m.tasks,nullif(m.staffing_requirements->>pid,'')::integer,m.assignment_rules);
   END LOOP;
-  FOR t IN SELECT value FROM jsonb_array_elements(CASE WHEN jsonb_array_length(coalesce(m.task_templates,'[]'))>0 THEN m.task_templates ELSE coalesce((SELECT jsonb_agg(jsonb_build_object('title',value)) FROM jsonb_array_elements_text(m.checklist)), '[]') END) LOOP
+  FOR t IN SELECT value FROM jsonb_array_elements(templates) LOOP
    INSERT INTO public.tasks(title,program_id,pole_id,status,priority,due_date,created_by)
-   VALUES(t->>'title',nid,nullif(t->>'pole_id','')::uuid,'todo',coalesce(t->>'priority','normale'),
+   VALUES(t->>'title',nid,coalesce(nullif(t->>'pole_id','')::uuid,fallback_pole),'todo',coalesce(t->>'priority','normale'),
    CASE WHEN t->>'due_offset_days' IS NOT NULL THEN d+(t->>'due_offset_days')::integer ELSE NULL END,auth.uid());
   END LOOP;
  END IF;

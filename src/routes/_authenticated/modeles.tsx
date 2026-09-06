@@ -1,3 +1,5 @@
+import { programError } from "@/lib/program-errors";
+import { useProgramEditorPermissions } from "@/hooks/useProgramEditorPermissions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -112,7 +114,9 @@ function Modeles() {
   const models = useQuery(programModelsQuery),
     poles = useQuery(polesQuery),
     qc = useQueryClient();
-  const { isStaff, member } = useCurrentRole();
+  const { member } = useCurrentRole();
+  const permissions = useProgramEditorPermissions();
+  const isStaff = !!permissions.data && permissions.data.model_scope !== "interdit" && (['tous', 'all'].includes(permissions.data.model_scope) || permissions.data.model_poles.length > 0);
   const [draft, setDraft] = useState<Draft | null>(null),
     [arch, setArch] = useState(false);
   const [generation, setGeneration] = useState<{
@@ -140,6 +144,13 @@ function Modeles() {
           : [];
       const modelId = v.id ?? newId("mdl");
       const rich = parseTasks(v.checklist, activePoles);
+      const allowed = await (supabase as any).rpc("can_manage_program_model", { p_poles: v.poles });
+      if (allowed.error) throw allowed.error;
+      if (!allowed.data) throw new Error("Vous ne pouvez pas gérer les modèles de ces pôles. Contactez la responsable pour vérifier vos accès aux modèles.");
+      if (dates.length) {
+        const check = await (supabase as any).rpc("check_program_write_access", { p_program_id: null, p_poles: v.poles, p_task_poles: rich.map(t => t.pole_id || (v.poles.length === 1 ? v.poles[0] : null)), p_generate: true });
+        if (check.error) throw check.error;
+      }
       const checklist = rich.map((t) => t.title);
       const payload: any = {
         schedule: v.schedule,
@@ -191,7 +202,7 @@ function Modeles() {
       qc.invalidateQueries({ queryKey: ["programs"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(programError(e)),
   });
 
   const toggle = useMutation({
@@ -234,7 +245,7 @@ function Modeles() {
       toast.success("Modèle dupliqué");
       refresh();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(programError(e)),
   });
 
   const instantiate = useMutation({
@@ -260,7 +271,7 @@ function Modeles() {
       qc.invalidateQueries({ queryKey: ["programs"] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(programError(e)),
   });
 
   const editDraft = (m: ProgramModel): Draft => {
@@ -289,7 +300,6 @@ function Modeles() {
               ? `J${t.due_offset_days >= 0 ? "+" : ""}${t.due_offset_days}`
               : "",
           ]
-            .filter(Boolean)
             .join(" | "),
         )
         .join("\n"),

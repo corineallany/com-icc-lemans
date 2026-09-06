@@ -1,3 +1,4 @@
+import { programError } from "@/lib/program-errors";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive } from "lucide-react";
@@ -319,6 +320,16 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         )
       )
         throw new Error("Chaque créneau doit avoir un jour et des horaires valides.");
+      const slotPoleIds = new Set(v.serviceSlots.map((s) => s.pole_id).filter(Boolean));
+      const selectedPoles = { ...v.poles };
+      for (const poleId of slotPoleIds)
+        selectedPoles[poleId] = {
+          ...(selectedPoles[poleId] ?? { tasks: "", memberIds: [] }),
+          selected: true,
+        };
+      const targetPoles = Object.entries(selectedPoles).filter(([, x]) => x.selected).map(([id]) => id);
+      const check = await (supabase as any).rpc("check_program_write_access", { p_program_id: v.id ?? null, p_poles: targetPoles, p_generate: dates.length > 1 });
+      if (check.error) throw check.error;
       let id = v.id ?? newId("p");
       const payload = {
         creation_key: v.creation_key,
@@ -370,13 +381,6 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       if (old.length)
         await supabase.from("program_assignment_members").delete().in("assignment_id", old);
       await supabase.from("program_assignments").delete().eq("program_id", id);
-      const slotPoleIds = new Set(v.serviceSlots.map((s) => s.pole_id).filter(Boolean));
-      const selectedPoles = { ...v.poles };
-      for (const poleId of slotPoleIds)
-        selectedPoles[poleId] = {
-          ...(selectedPoles[poleId] ?? { tasks: "", memberIds: [] }),
-          selected: true,
-        };
       const sel = Object.entries(selectedPoles).filter(([, x]) => x.selected),
         rows = sel.map(([pole_id, x]) => ({
           id: newId("pa"),
@@ -391,7 +395,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       const directByPole = new Map<string, Set<string>>();
       for (const s of v.serviceSlots)
         for (const mid of s.memberIds) {
-          const poleId = s.pole_id || links.find((l: any) => l.member_id === mid)?.pole_id;
+          const poleId = s.pole_id || links.find((l: any) => l.member_id === mid && targetPoles.includes(l.pole_id))?.pole_id;
           if (poleId) {
             if (!directByPole.has(poleId)) directByPole.set(poleId, new Set());
             directByPole.get(poleId)!.add(mid);
@@ -501,7 +505,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
     },
     onError: (e: Error) =>
       toast.error(
-        `Enregistrement interrompu : ${e.message}. Tu peux réessayer sans créer de doublon.`,
+        `Enregistrement interrompu : ${programError(e)}`,
       ),
   });
   const archive = useMutation({
@@ -524,7 +528,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       qc.invalidateQueries({ queryKey: ["programs"] });
       qc.invalidateQueries({ queryKey: ["archives-programs"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => toast.error(programError(e)),
   });
   return (
     <div className="space-y-4">
