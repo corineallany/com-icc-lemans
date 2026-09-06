@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ function friendlyError(message: string) {
 
 function AuthPage() {
   const router = useRouter(),
+    registrationInProgress = useRef(false),
     [mode, setMode] = useState<Mode>("signin"),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -49,7 +50,12 @@ function AuthPage() {
     if (recoveryInUrl) setMode("recovery");
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "PASSWORD_RECOVERY") setMode("recovery");
-      else if (session && !recoveryInUrl && event === "SIGNED_IN")
+      else if (
+        session &&
+        !recoveryInUrl &&
+        !registrationInProgress.current &&
+        event === "SIGNED_IN"
+      )
         router.navigate({ to: "/tableau-de-bord" });
     });
     supabase.auth.getSession().then(({ data }) => {
@@ -78,14 +84,19 @@ function AuthPage() {
     if (password !== confirmation)
       return toast.error("Les deux mots de passe ne sont pas identiques.");
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
+    registrationInProgress.current = true;
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: { emailRedirectTo: authUrl() },
     });
     setBusy(false);
-    if (error)
+    if (error) {
+      registrationInProgress.current = false;
       return toast.error("Inscription impossible", { description: friendlyError(error.message) });
+    }
+    if (data.session) await supabase.auth.signOut();
+    registrationInProgress.current = false;
     setMode("success");
     setPassword("");
     setConfirmation("");
