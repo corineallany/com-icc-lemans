@@ -4,6 +4,10 @@ import { Archive } from "lucide-react";
 import { toast } from "sonner";
 import { Field, newId } from "@/components/admin/form-kit";
 import { useCurrentRole } from "@/hooks/useAuth";
+import { RecurrenceFields } from "@/components/programs/RecurrenceFields";
+import { TravelMembers } from "@/components/programs/TravelMembers";
+import { recurrenceDates, type RecurrenceRule } from "@/lib/recurrence";
+import { canonicalProgramFormat, canonicalProgramRecurrence } from "@/lib/programLabels";
 import { supabase } from "@/integrations/supabase/client";
 import {
   availabilityQuery,
@@ -87,6 +91,9 @@ type Draft = {
   importance: string;
   format: string;
   recurrence: string;
+  recurrence_until: string;
+  recurrence_rule: RecurrenceRule & { source_program_id?: string };
+  travel_member_ids: string[];
   audience: string;
   onsite: string;
   travel: string;
@@ -114,6 +121,9 @@ const emptyDraft = (): Draft => ({
   importance: "normal",
   format: "Présentiel",
   recurrence: "ponctuel",
+  recurrence_until: "",
+  recurrence_rule: {},
+  travel_member_ids: [],
   audience: "ICC",
   onsite: "",
   travel: "",
@@ -187,6 +197,32 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       .select("*")
       .eq("program_id", p.id)
       .order("position");
+    if (dayRes.error || slotRes.error) {
+      toast.error("Impossible de charger les créneaux.");
+      return;
+    }
+    const memberRows = p.assignments.length
+      ? await t
+          .from("program_assignment_members")
+          .select("id,member_id")
+          .in(
+            "assignment_id",
+            p.assignments.map((a) => a.id),
+          )
+      : { data: [], error: null };
+    const memberSlots = (slotRes.data ?? []).length
+      ? await t
+          .from("program_assignment_member_slots")
+          .select("assignment_member_id,service_slot_id")
+          .in(
+            "service_slot_id",
+            slotRes.data.map((s: any) => s.id),
+          )
+      : { data: [], error: null };
+    if (memberRows.error || memberSlots.error) {
+      toast.error("Impossible de charger les affectations des créneaux.");
+      return;
+    }
     const dayMap = new Map((dayRes.data ?? []).map((d: any) => [d.id, d.service_date]));
     const assignmentMap = new Map(p.assignments.map((a: any) => [a.id, a.pole_id]));
     const serviceSlots: ServiceSlotDraft[] = (slotRes.data ?? []).map((s: any) => ({
@@ -197,7 +233,12 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       end_time: s.end_time ?? "",
       required_count: s.required_count ?? 1,
       pole_id: s.assignment_id ? (assignmentMap.get(s.assignment_id) ?? "") : "",
-      memberIds: [],
+      memberIds: (memberSlots.data ?? [])
+        .filter((m: any) => m.service_slot_id === s.id)
+        .map(
+          (m: any) => memberRows.data.find((a: any) => a.id === m.assignment_member_id)?.member_id,
+        )
+        .filter(Boolean),
     }));
     setDraft({
       id: p.id,
@@ -215,6 +256,9 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       importance: p.importance ?? "normal",
       format: p.format ?? "Présentiel",
       recurrence: p.recurrence ?? "ponctuel",
+      recurrence_until: p.recurrence_until ?? "",
+      recurrence_rule: (p.recurrence_rule as any) ?? {},
+      travel_member_ids: (p as any).travel_member_ids ?? [],
       audience: p.audience ?? "ICC",
       onsite: p.onsite ?? "",
       travel: p.travel ?? "",
@@ -252,6 +296,14 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
   const save = useMutation({
     mutationFn: async (v: Draft) => {
       if (!v.title.trim()) throw new Error("Le titre est obligatoire.");
+      const dates = v.recurrence_rule.source_program_id
+        ? [v.start_date]
+        : recurrenceDates(
+            v.start_date,
+            v.recurrence_until,
+            canonicalProgramRecurrence(v.recurrence),
+            v.recurrence_rule,
+          );
       if (!v.start_date) throw new Error("La date du programme est obligatoire.");
       if (!v.response_deadline) throw new Error("La date limite de réponse est obligatoire.");
       if (v.response_deadline < todayIso())
@@ -283,6 +335,11 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         importance: v.importance,
         format: v.format || null,
         recurrence: v.recurrence || null,
+        recurrence_until: v.recurrence === "ponctuel" ? null : v.recurrence_until || null,
+        recurrence_rule: v.recurrence_rule,
+        travel_member_ids: canonicalProgramFormat(v.format).startsWith("deplacement")
+          ? v.travel_member_ids
+          : [],
         audience: v.audience || null,
         onsite: v.onsite.trim() || null,
         travel: v.travel.trim() || null,
@@ -418,6 +475,13 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         }
       }
       await uploadFiles(id);
+      if (dates.length > 1) {
+        const generated = await (supabase as any).rpc("generate_program_occurrences", {
+          p_program_id: id,
+          p_dates: dates,
+        });
+        if (generated.error) throw generated.error;
+      }
       await logAction({
         action: v.id ? "programme_modifie" : "programme_cree",
         entity: "program",
@@ -641,21 +705,29 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                   />
                 </Field>
               </div>
+              {!draft.recurrence_rule.source_program_id ? (
+                <RecurrenceFields
+                  frequency={canonicalProgramRecurrence(draft.recurrence)}
+                  start={draft.start_date}
+                  until={draft.recurrence_until}
+                  rule={draft.recurrence_rule}
+                  onChange={(recurrence_until, recurrence_rule) =>
+                    setDraft({ ...draft, recurrence_until, recurrence_rule })
+                  }
+                />
+              ) : (
+                <p className="text-sm">Cette modification concerne uniquement cette occurrence.</p>
+              )}
+              {canonicalProgramFormat(draft.format).startsWith("deplacement") ? (
+                <TravelMembers
+                  members={allMembers.filter((m) => m.status === "active" && !m.archived)}
+                  selected={draft.travel_member_ids}
+                  onChange={(travel_member_ids) => setDraft({ ...draft, travel_member_ids })}
+                />
+              ) : null}
               {(draft.program_type === "Corporate" ||
                 draft.program_type === "Autre église-Invitation") && (
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <Field label="Membres sur place">
-                    <Input
-                      value={draft.onsite}
-                      onChange={(e) => setDraft({ ...draft, onsite: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Membres en déplacement">
-                    <Input
-                      value={draft.travel}
-                      onChange={(e) => setDraft({ ...draft, travel: e.target.value })}
-                    />
-                  </Field>
                   <Field label="Personnes invitées / déplacement">
                     <Input
                       value={draft.invite_members}
