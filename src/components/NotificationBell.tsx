@@ -3,10 +3,25 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, CheckCheck, Inbox as InboxIcon } from "lucide-react";
 
-import { getNotifications, markNotificationRead, markAllNotificationsRead } from "@/lib/push.functions";
 import { formatDateTime } from "@/lib/icc";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
+async function loadBellNotifications() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await (supabase as any)
+    .from("notifications")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("in_app_visible", true)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return data ?? [];
+}
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
@@ -14,34 +29,52 @@ export function NotificationBell() {
   const queryClient = useQueryClient();
   const { data: rawNotifications, refetch } = useQuery({
     queryKey: ["notifications"],
-    queryFn: getNotifications,
+    queryFn: loadBellNotifications,
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     staleTime: 0,
   });
 
-  // The backend is the source of truth for notification preferences.
-  // Never show or count notifications whose in-app channel is disabled.
   const visibleNotifications = (rawNotifications ?? []).filter(
-    (n: any) => n.in_app_visible !== false && !n.archived_at && !n.deleted_at,
+    (n: any) => !n.archived_at && !n.deleted_at,
   );
   const notifications = visibleNotifications.slice(0, 12);
   const unread = visibleNotifications.filter((n: any) => !n.read).length;
 
   const markReadMut = useMutation({
-    mutationFn: (id: string) => markNotificationRead({ data: { id } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    mutationFn: async (id: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Session absente");
+      const { error } = await (supabase as any).from("notifications")
+        .update({ read: true, read_at: new Date().toISOString() })
+        .eq("id", id).eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notification-center"] });
+    },
   });
+
   const markAllMut = useMutation({
-    mutationFn: () => markAllNotificationsRead(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Session absente");
+      const { error } = await (supabase as any).from("notifications")
+        .update({ read: true, read_at: new Date().toISOString() })
+        .eq("user_id", user.id).eq("read", false).eq("in_app_visible", true)
+        .is("archived_at", null).is("deleted_at", null);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notification-center"] });
+    },
   });
 
   function toggleBell() {
     setOpen((o) => !o);
-    // Force a fresh server read when the user opens the bell. This avoids a
-    // stale client cache on iOS/PWA after a push wakes or resumes the app.
     void refetch();
   }
 
