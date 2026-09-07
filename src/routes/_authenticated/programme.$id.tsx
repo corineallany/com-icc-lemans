@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { ProgramFullExport } from "@/components/programs/ProgramFullExport";
+import { ProgramParticipationPanel } from "@/components/programs/ProgramParticipationPanel";
 import { CopyProgramLinkButton } from "@/components/programs/CopyProgramLinkButton";
 import { useCurrentRole } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -779,7 +780,15 @@ function ProgramSheet() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AppShell>
+    
+      <ProgramParticipationPanel
+        programId={id}
+        programTitle={program.title}
+        assignments={program.assignments as any}
+        members={(members.data?.members ?? []) as any}
+        poles={(poles.data ?? []) as any}
+      />
+</AppShell>
   );
 }
 function Info({ label, value }: { label: string; value: string }) {
