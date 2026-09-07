@@ -15,16 +15,19 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Rename user-facing wording only
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          # Technical route/table/query identifiers remain unchanged. Only visible vocabulary changes.
-          general = {
-              'Sollicitations ponctuelles': 'Demandes ponctuelles',
-              'Sollicitations': 'Demandes ponctuelles',
+          # IMPORTANT: technical identifiers/routes/tables stay named "sollicitation" internally.
+          # Only exact user-facing text is renamed.
+          safe_global = {
+              '"Sollicitations ponctuelles"': '"Demandes ponctuelles"',
+              '"Sollicitations"': '"Demandes ponctuelles"',
+              '>Sollicitations<': '>Demandes ponctuelles<',
+              '>Sollicitations ponctuelles<': '>Demandes ponctuelles<',
           }
           file_specific = {
               'src/routes/_authenticated/sollicitations.tsx': {
@@ -58,7 +61,7 @@ jobs:
                   continue
               s = p.read_text()
               old = s
-              for a,b in general.items():
+              for a,b in safe_global.items():
                   s = s.replace(a,b)
               for a,b in file_specific.get(p.as_posix(), {}).items():
                   s = s.replace(a,b)
@@ -71,6 +74,7 @@ jobs:
           ! grep -nE 'Sollicitations ponctuelles|Nouvelle sollicitation ponctuelle|Aucune sollicitation|Modifier la sollicitation|Sollicitation (modifiée|créée et envoyée|annulée)|Réponse à une sollicitation|personne\(s\) sollicitée\(s\)' src/routes/_authenticated/sollicitations.tsx
           ! grep -n 'Aucune sollicitation en cours pour ce pôle.' 'src/routes/_authenticated/pole.$id.tsx'
           ! grep -nE 'Nouvelle sollicitation ponctuelle|Sollicitation ponctuelle modifiée ou annulée|après une sollicitation|à une sollicitation que je pilote|d’une sollicitation' src/lib/icc.ts
+          grep -n 'function Sollicitations' src/routes/_authenticated/sollicitations.tsx
       - name: Build
         run: |
           npm install --no-audit --no-fund
