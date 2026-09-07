@@ -1,37 +1,16 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 
-import { FinanceCorrectionShortcut } from "@/components/FinanceCorrectionShortcut";
-import { FinanceSettingsShortcut } from "@/components/FinanceSettingsShortcut";
-import { IccHeader } from "@/components/IccHeader";
-
-class HeaderBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  componentDidCatch(error: unknown, info: ErrorInfo) {
-    console.error("[icc-header]", error, info);
-  }
-  render() {
-    if (!this.state.failed) return this.props.children;
-    return (
-      <header className="sticky top-0 z-50 bg-icc-violet text-white shadow-lg">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
-          <Link to="/tableau-de-bord" className="flex items-center gap-3 font-black">
-            <span className="rounded-xl bg-icc-yellow px-3 py-2 text-icc-violet">ICC</span>
-            <span>LE MANS</span>
-          </Link>
-          <Link to="/tableau-de-bord" className="rounded-lg border border-white/30 px-3 py-2 text-xs font-bold">
-            Accueil
-          </Link>
-        </div>
-      </header>
-    );
-  }
+function appHref(path = "/tableau-de-bord") {
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  return `${base}${path}`;
 }
 
-/** Coquille commune des pages internes. */
+/**
+ * Coquille volontairement autonome des pages internes.
+ * IMPORTANT: ne pas importer ici de composants métier, hooks Supabase ou modules
+ * optionnels. AppShell est chargé par presque toutes les routes; une dépendance
+ * défaillante à ce niveau rendrait toute l'application interne inaccessible.
+ */
 export function AppShell({
   title,
   subtitle,
@@ -49,12 +28,23 @@ export function AppShell({
       window.history.back();
       return;
     }
-    window.location.assign(`${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "/tableau-de-bord")}`);
+    window.location.assign(appHref());
   }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <HeaderBoundary><IccHeader /></HeaderBoundary>
+      <header className="sticky top-0 z-50 bg-icc-violet text-white shadow-lg">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
+          <a href={appHref()} className="flex items-center gap-3 text-left">
+            <span className="rounded-xl bg-icc-yellow px-3 py-2 text-lg font-black tracking-wide text-icc-violet shadow md:text-xl">ICC</span>
+            <span className="leading-none">
+              <span className="block text-lg font-black tracking-[.08em] text-white md:text-xl">LE MANS</span>
+              <span className="mt-1 block text-[8px] font-semibold tracking-wide text-white/75 md:text-[9px]">Communication • Organisation • Service</span>
+            </span>
+          </a>
+          <a href={appHref()} className="rounded-lg border border-white/30 px-3 py-2 text-xs font-bold hover:bg-white/10">Accueil</a>
+        </div>
+      </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -63,11 +53,7 @@ export function AppShell({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {actions}
-            {title === "Caisse fraternelle" ? <FinanceSettingsShortcut /> : null}
-            {title === "Caisse fraternelle" ? <FinanceCorrectionShortcut /> : null}
-            <button type="button" onClick={goBack} className="text-xs font-bold text-icc-violet hover:underline">
-              ← Retour
-            </button>
+            <button type="button" onClick={goBack} className="text-xs font-bold text-icc-violet hover:underline">← Retour</button>
           </div>
         </div>
         {children}
