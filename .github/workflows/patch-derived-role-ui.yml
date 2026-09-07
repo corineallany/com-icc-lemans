@@ -1,0 +1,32 @@
+name: Patch derived organizational role UI
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-derived-role-ui.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make member role structure-derived
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/components/admin/AdminMembres.tsx')
+          s=p.read_text()
+          s=s.replace('first_name:first||null,last_name:last||null,full_name:fullName,base_role:value.base_role,status:value.status,', 'first_name:first||null,last_name:last||null,full_name:fullName,base_role:Object.values(value.poles).some((v)=>v.selected&&v.referent)?"referent":"equipier",status:value.status,')
+          old='''<div className="grid gap-3 sm:grid-cols-2"><Field label="Rôle de base"><Select value={draft.base_role} onValueChange={(v)=>setDraft({...draft,base_role:v as AppRole})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{ROLES.map((r)=><SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}</SelectContent></Select></Field><Field label="Statut"><Select value={draft.status} onValueChange={(v)=>setDraft({...draft,status:v as MemberStatus})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{STATUSES.map((s)=><SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></Field></div>'''
+          new='''<div className="grid gap-3 sm:grid-cols-2"><Field label="Rôle organisationnel"><div className="min-h-10 rounded-md border bg-muted/30 px-3 py-2 text-sm"><b>{Object.values(draft.poles).some((v)=>v.selected&&v.referent)?"Référent":"Équipier"}</b><p className="text-xs text-muted-foreground">Automatique selon la structure. La Direction se gère dans Paramètres.</p></div></Field><Field label="Statut"><Select value={draft.status} onValueChange={(v)=>setDraft({...draft,status:v as MemberStatus})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{STATUSES.map((s)=><SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></Field></div>'''
+          if old not in s:
+            raise SystemExit('role field marker not found')
+          s=s.replace(old,new)
+          p.write_text(s)
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/admin/AdminMembres.tsx
+          git commit -m "fix: derive member role from organization" || exit 0
+          git push
