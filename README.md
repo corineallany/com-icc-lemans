@@ -13,6 +13,12 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 - **Stay in sync**: every change made in Lovable is committed straight to this repository.
 - **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
+## Terminologie fonctionnelle
+
+- **Demandes ponctuelles** : module transversal pour les renforts, remplacements et autres besoins ponctuels. Le chemin technique `/sollicitations` et les identifiants de base de données historiques restent inchangés afin de préserver la compatibilité.
+- **Sollicitation dans un programme** : demande de participation liée à un programme et à un besoin précis, avec réponse attendue du membre.
+- **Affectation directe** : participation confirmée immédiatement, sans réponse attendue.
+
 ## Development
 
 Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
