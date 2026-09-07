@@ -1,0 +1,43 @@
+name: Patch default availability labels
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-availability-default.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Simplify member availability labels
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p=Path('src/components/admin/AdminProgrammes.tsx')
+          s=p.read_text()
+          s=s.replace('{inactive ? "Inactif" : u ? "Indisponible" : "Disponible"}', '{inactive ? "Inactif" : u ? "Indisponible" : null}')
+          p.write_text(s)
+
+          p=Path('src/routes/_authenticated/sollicitations.tsx')
+          s=p.read_text()
+          s=s.replace('if (!w) return { level: "unknown", label: "Disponibilité inconnue" };', 'if (!w) return { level: "ok", label: "" };')
+          s=s.replace('return { level: "ok", label: "Mobilisable · aucun conflit connu" };', 'return { level: "ok", label: "" };')
+          old='''items={activeMembers.map((m: any) => [
+                        m.id,
+                        `${m.full_name} · ${availabilityState(m.id, form.program_id).label}`,
+                      ])}'''
+          new='''items={activeMembers.map((m: any) => {
+                        const av = availabilityState(m.id, form.program_id);
+                        return [m.id, av.label ? `${m.full_name} · ${av.label}` : m.full_name];
+                      })}'''
+          s=s.replace(old,new)
+          p.write_text(s)
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/admin/AdminProgrammes.tsx src/routes/_authenticated/sollicitations.tsx
+          git commit -m "refine: availability is implicit by default" || exit 0
+          git push
