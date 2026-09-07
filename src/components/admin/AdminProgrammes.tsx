@@ -368,8 +368,23 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           if (r.error) throw new Error(r.error.message);
         }
       }
-      const old =
-        (programs.data ?? []).find((p) => p.id === id)?.assignments.map((a) => a.id) ?? [];
+      const oldAssignments =
+        (programs.data ?? []).find((p) => p.id === id)?.assignments ?? [];
+      const old = oldAssignments.map((a) => a.id);
+      const previousParticipation = old.length
+        ? await (supabase as any)
+            .from("program_assignment_members")
+            .select("assignment_id,member_id,assignment_mode,assigned_at,assigned_by,process_status")
+            .in("assignment_id", old)
+        : { data: [], error: null };
+      if (previousParticipation.error) throw previousParticipation.error;
+      const oldPoleByAssignment = new Map(oldAssignments.map((a) => [a.id, a.pole_id]));
+      const previousByPoleMember = new Map(
+        (previousParticipation.data ?? []).map((r: any) => [
+          `${oldPoleByAssignment.get(r.assignment_id)}::${r.member_id}`,
+          r,
+        ]),
+      );
       if (old.length)
         await supabase.from("program_assignment_members").delete().in("assignment_id", old);
       await supabase.from("program_assignments").delete().eq("program_id", id);
@@ -395,7 +410,21 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         }
       const mr = rows.flatMap((a, i) =>
         [...new Set([...sel[i][1].memberIds, ...(directByPole.get(a.pole_id) ?? [])])].map(
-          (member_id) => ({ assignment_id: a.id, member_id }),
+          (member_id) => {
+            const previous: any = previousByPoleMember.get(`${a.pole_id}::${member_id}`);
+            const assignment_mode = previous?.assignment_mode ?? "direct";
+            return {
+              assignment_id: a.id,
+              member_id,
+              assignment_mode,
+              process_status: previous?.process_status ?? "active",
+              assigned_at:
+                assignment_mode === "solicited"
+                  ? null
+                  : previous?.assigned_at ?? new Date().toISOString(),
+              assigned_by: assignment_mode === "solicited" ? null : previous?.assigned_by ?? null,
+            };
+          },
         ),
       );
       let savedMembers: any[] = [];
@@ -796,7 +825,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
               <section>
                 <h3 className="mb-2 font-black text-icc-violet">Pôles et membres mobilisés</h3>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Les membres proposés dans chaque bloc appartiennent à ce pôle. Pour un programme en déplacement, coche « Déplacement » uniquement sur les personnes qui partent ; les autres restent sur place par défaut.
+                  Les membres proposés dans chaque bloc appartiennent à ce pôle. Une personne cochée ici est affectée directement : aucune réponse ne lui sera demandée. Pour solliciter une personne et attendre sa réponse, enregistre le programme puis utilise le bloc « Solliciter » dans sa fiche. Pour un programme en déplacement, coche « Déplacement » uniquement sur les personnes qui partent ; les autres restent sur place par défaut.
                 </p>
                 <div className="space-y-3">
                   {activePoles.map((pole) => {
