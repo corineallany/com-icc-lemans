@@ -10,7 +10,7 @@ export function usePush(userId:string|undefined){
  const[state,setState]=useState<PushState>("loading"),[subscribed,setSubscribed]=useState(false),[currentEndpoint,setCurrentEndpoint]=useState<string|null>(null),[error,setError]=useState<string|null>(null);
  useEffect(()=>{if(!userId)return;if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window)){setState("unsupported");return}
   let cancelled=false;
-  async function init(){try{await navigator.serviceWorker.register(swUrl());const reg=await navigator.serviceWorker.ready;const perm=Notification.permission;if(cancelled)return;setState(perm==="granted"?"granted":perm==="denied"?"denied":"default");const local=await reg.pushManager.getSubscription();if(cancelled)return;setCurrentEndpoint(local?.endpoint??null);if(perm==="granted"&&local){const remote=await callPush({action:"push-status"});if(!cancelled)setSubscribed(!!remote.active)}else if(!cancelled)setSubscribed(false)}catch(err){if(cancelled)return;setState(Notification.permission==="denied"?"denied":"default");setSubscribed(false);setError(err instanceof Error?err.message:"Impossible d’initialiser les notifications push.")}}
+  async function init(){try{await navigator.serviceWorker.register(swUrl());const reg=await navigator.serviceWorker.ready;const perm=Notification.permission;if(cancelled)return;setState(perm==="granted"?"granted":perm==="denied"?"denied":"default");const local=await reg.pushManager.getSubscription();if(cancelled)return;setCurrentEndpoint(local?.endpoint??null);if(perm==="granted"&&local){const remote=await callPush({action:"push-status",endpoint:local.endpoint});if(!cancelled)setSubscribed(!!remote.active)}else if(!cancelled)setSubscribed(false)}catch(err){if(cancelled)return;setState(Notification.permission==="denied"?"denied":"default");setSubscribed(false);setError(err instanceof Error?err.message:"Impossible d’initialiser les notifications push.")}}
   init();return()=>{cancelled=true};
  },[userId]);
  const enable=useCallback(async()=>{if(!userId)return;setError(null);setState("loading");try{
@@ -20,7 +20,7 @@ export function usePush(userId:string|undefined){
   let sub=await registration.pushManager.getSubscription();
   if(!sub){const key=await callPush({action:"public-key"});if(!key.publicKey)throw new Error("La clé Push publique n’est pas configurée.");sub=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(key.publicKey)})}
   await callPush({action:"push-subscribe",subscription:sub.toJSON(),userAgent:navigator.userAgent});
-  const status=await callPush({action:"push-status"});if(!status.active)throw new Error("L’abonnement Push n’a pas été confirmé par le serveur.");
+  const status=await callPush({action:"push-status",endpoint:sub.endpoint});if(!status.active)throw new Error("L’abonnement Push de cet appareil n’a pas été confirmé par le serveur.");
   setCurrentEndpoint(sub.endpoint);setSubscribed(true);
  }catch(err){setState(Notification.permission==="denied"?"denied":"default");setError(err instanceof Error?err.message:"Erreur lors de l’activation des notifications.")}},[userId]);
  const disable=useCallback(async()=>{if(!userId)return;setError(null);try{const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();if(sub){await callPush({action:"push-disable",endpoint:sub.endpoint});await sub.unsubscribe()}setCurrentEndpoint(null);setSubscribed(false)}catch(err){setError(err instanceof Error?err.message:"Erreur lors de la désactivation")}},[userId]);
