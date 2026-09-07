@@ -1,0 +1,30 @@
+name: One-shot dedupe push devices
+on:
+  push:
+    paths: ['.github/workflows/one-shot-dedupe-push-devices.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - name: Patch device list
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/routes/_authenticated/mes-appareils.tsx')
+          s=p.read_text()
+          old='''  const rows=devices.data??[];\n  const currentRow=rows.find(r=>r.endpoint===push.currentEndpoint);'''
+          new='''  const rawRows=devices.data??[];\n  const deviceKey=(row:DeviceRow)=>{const i=deviceInfo(row.user_agent);return `${i.kind}|${i.brand}|${i.model}|${i.browser}`.toLowerCase()};\n  const grouped=new Map<string,DeviceRow[]>();\n  for(const row of rawRows){const key=deviceKey(row);grouped.set(key,[...(grouped.get(key)??[]),row])}\n  const rows=[...grouped.values()].map(group=>group.find(r=>r.endpoint===push.currentEndpoint)??group.find(r=>r.enabled)??group[0]);\n  const currentRow=rawRows.find(r=>r.endpoint===push.currentEndpoint);'''
+          if old not in s: raise SystemExit('target rows block not found')
+          s=s.replace(old,new)
+          s=s.replace('Tous les appareils restent enregistrés jusqu’à leur suppression.','Un même appareil n’est affiché qu’une seule fois, même si son abonnement Push a été renouvelé.')
+          p.write_text(s)
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/routes/_authenticated/mes-appareils.tsx
+          git commit -m 'fix: show each push device only once'
+          git push
