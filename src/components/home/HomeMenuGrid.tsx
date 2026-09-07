@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
 type Item={key:string;icon:string;title:string;desc:string;to:string;tone?:"default"|"violet"|"dark"};
@@ -25,6 +24,11 @@ const ITEMS:Item[]=[
  {key:"parametres",icon:"⚙️",title:"Paramètres",desc:"Structure, droits et configuration.",to:"/parametres",tone:"dark"},
 ];
 
+function fullHref(to:string){
+  const base=(import.meta.env.BASE_URL||"/").replace(/\/$/,"");
+  return `${base}${to}`;
+}
+
 export function HomeMenuGrid(){
  return <>
   <div className="mt-6 rounded-2xl border border-violet-200 bg-violet-50/50 p-4 text-sm">
@@ -32,11 +36,11 @@ export function HomeMenuGrid(){
    <p className="mt-1 text-muted-foreground">Retrouvez ici toutes les fonctionnalités de COM ICC Le Mans. Les droits de modification restent appliqués à l’intérieur de chaque module selon votre rôle.</p>
   </div>
   <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-   {ITEMS.map(item=><Link key={item.key} to={item.to as any} className={cn("icc-menu-card block",item.tone==="violet"&&"bg-icc-violet text-white hover:bg-icc-violet-hover",item.tone==="dark"&&"border-slate-800 bg-slate-800 text-white hover:bg-slate-900")}>
+   {ITEMS.map(item=><a key={item.key} href={fullHref(item.to)} className={cn("icc-menu-card block",item.tone==="violet"&&"bg-icc-violet text-white hover:bg-icc-violet-hover",item.tone==="dark"&&"border-slate-800 bg-slate-800 text-white hover:bg-slate-900")}>
     <span className={cn("text-2xl",item.tone?"text-icc-yellow":"text-icc-violet")}>{item.icon}</span>
     <h3 className="mt-2.5 font-black">{item.title}</h3>
     <p className={cn("mt-1 text-xs",item.tone?"text-white/70":"text-muted-foreground")}>{item.desc}</p>
-   </Link>)}
+   </a>)}
   </div>
  </>;
 }
