@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -40,13 +40,17 @@ export function useAuth() {
 }
 
 /**
- * Rôle applicatif + permissions.
- * La structure définie dans Paramètres est prioritaire pour la Direction :
- * le membre choisi comme Responsable/Adjoint doit réellement disposer de ces droits,
- * même si une ancienne ligne user_roles n'a pas encore été synchronisée.
+ * Rôle applicatif dérivé de la structure réelle :
+ * - Équipier par défaut ;
+ * - Référent si le membre est référent d'au moins un pôle ;
+ * - Responsable / Adjoint selon Paramètres > Direction ;
+ * - admin_technique reste un accès transversal et ne remplace pas le rôle hiérarchique.
+ *
+ * La base synchronise automatiquement user_roles avec member_poles et app_settings.
  */
 export function useCurrentRole() {
   const { user, loading } = useAuth();
+  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["current-role", user?.id],
@@ -68,9 +72,8 @@ export function useCurrentRole() {
           : null;
       if (configuredRole && !roles.includes(configuredRole)) roles.push(configuredRole);
 
-      // Rôle hiérarchique affiché ; « admin_technique » est un accès transversal, pas un niveau.
       const order: AppRole[] = ["responsable", "adjoint", "referent", "equipier"];
-      const role = order.find((r) => roles.includes(r)) ?? (roles[0] ?? null);
+      const role = order.find((r) => roles.includes(r)) ?? (roles[0] ?? "equipier");
       const permissions = new Set(
         (permsRes.data ?? []).filter((p) => roles.includes(p.role as AppRole)).map((p) => p.permission),
       );
@@ -78,6 +81,19 @@ export function useCurrentRole() {
       return { role, roles, permissions, member: memberRes.data ?? null };
     },
   });
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`current-role-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_roles", filter: `user_id=eq.${user.id}` },
+        () => queryClient.invalidateQueries({ queryKey: ["current-role", user.id] }),
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [user?.id, queryClient]);
 
   const role = query.data?.role ?? null;
   const roles = query.data?.roles ?? [];
