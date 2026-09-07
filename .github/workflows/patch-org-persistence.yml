@@ -14,49 +14,11 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
+          import re, base64
           p=Path('src/routes/_authenticated/parametres.tsx')
           s=p.read_text()
           pattern=r'''  const saveOrg = useMutation\(\{.*?\n  if \(!canEdit\)'''
-          replacement='''  const saveOrg = useMutation({
-    mutationFn: async () => {
-      if (!canEdit) throw new Error("Consultation uniquement.");
-      const group_leads =
-        structure === "responsable_general_grands_groupes"
-          ? { communication: commLead || null, audiovisuel: avLead || null }
-          : {};
-      const { data, error } = await (supabase as any).rpc("save_organization_settings", {
-        p_direction_structure: structure,
-        p_supervisor_member_id: responsable || "",
-        p_adjoint_member_id: structure === "responsable_adjoint" ? adjoint || "" : "",
-        p_group_leads: group_leads,
-        p_referents: referents,
-      });
-      if (error) throw error;
-      if (!data?.success) throw new Error("L’organisation n’a pas été confirmée par le serveur.");
-
-      const { data: savedLinks, error: verifyError } = await supabase
-        .from("member_poles")
-        .select("pole_id,member_id,is_referent")
-        .eq("is_referent", true);
-      if (verifyError) throw verifyError;
-      for (const pole of activePoles) {
-        const expected = referents[pole.id] || "";
-        const actual = (savedLinks ?? []).find((l: any) => l.pole_id === pole.id)?.member_id || "";
-        if (actual !== expected) throw new Error(`Vérification échouée pour ${pole.name}. Aucun message de succès n’a été validé.`);
-      }
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["app-settings"] }),
-        qc.invalidateQueries({ queryKey: ["members"] }),
-        qc.invalidateQueries({ queryKey: ["current-role"] }),
-      ]);
-      toast.success("Organisation réellement enregistrée et vérifiée");
-    },
-    onError: (e: any) => toast.error("Enregistrement impossible", { description: e.message }),
-  });
-  if (!canEdit)'''
+          replacement=base64.b64decode('ICBjb25zdCBzYXZlT3JnID0gdXNlTXV0YXRpb24oewogICAgbXV0YXRpb25GbjogYXN5bmMgKCkgPT4gewogICAgICBpZiAoIWNhbkVkaXQpIHRocm93IG5ldyBFcnJvcigiQ29uc3VsdGF0aW9uIHVuaXF1ZW1lbnQuIik7CiAgICAgIGNvbnN0IGdyb3VwX2xlYWRzID0KICAgICAgICBzdHJ1Y3R1cmUgPT09ICJyZXNwb25zYWJsZV9nZW5lcmFsX2dyYW5kc19ncm91cGVzIgogICAgICAgICAgPyB7IGNvbW11bmljYXRpb246IGNvbW1MZWFkIHx8IG51bGwsIGF1ZGlvdmlzdWVsOiBhdkxlYWQgfHwgbnVsbCB9CiAgICAgICAgICA6IHt9OwogICAgICBjb25zdCB7IGRhdGEsIGVycm9yIH0gPSBhd2FpdCAoc3VwYWJhc2UgYXMgYW55KS5ycGMoInNhdmVfb3JnYW5pemF0aW9uX3NldHRpbmdzIiwgewogICAgICAgIHBfZGlyZWN0aW9uX3N0cnVjdHVyZTogc3RydWN0dXJlLAogICAgICAgIHBfc3VwZXJ2aXNvcl9tZW1iZXJfaWQ6IHJlc3BvbnNhYmxlIHx8ICIiLAogICAgICAgIHBfYWRqb2ludF9tZW1iZXJfaWQ6IHN0cnVjdHVyZSA9PT0gInJlc3BvbnNhYmxlX2Fkam9pbnQiID8gYWRqb2ludCB8fCAiIiA6ICIiLAogICAgICAgIHBfZ3JvdXBfbGVhZHM6IGdyb3VwX2xlYWRzLAogICAgICAgIHBfcmVmZXJlbnRzOiByZWZlcmVudHMsCiAgICAgIH0pOwogICAgICBpZiAoZXJyb3IpIHRocm93IGVycm9yOwogICAgICBpZiAoIWRhdGE/LnN1Y2Nlc3MpIHRocm93IG5ldyBFcnJvcigiTOKAmW9yZ2FuaXNhdGlvbiBu4oCZYSBwYXMgw6l0w6kgY29uZmlybcOpZSBwYXIgbGUgc2VydmV1ci4iKTsKCiAgICAgIGNvbnN0IHsgZGF0YTogc2F2ZWRMaW5rcywgZXJyb3I6IHZlcmlmeUVycm9yIH0gPSBhd2FpdCBzdXBhYmFzZQogICAgICAgIC5mcm9tKCJtZW1iZXJfcG9sZXMiKQogICAgICAgIC5zZWxlY3QoInBvbGVfaWQsbWVtYmVyX2lkLGlzX3JlZmVyZW50IikKICAgICAgICAuZXEoImlzX3JlZmVyZW50IiwgdHJ1ZSk7CiAgICAgIGlmICh2ZXJpZnlFcnJvcikgdGhyb3cgdmVyaWZ5RXJyb3I7CiAgICAgIGZvciAoY29uc3QgcG9sZSBvZiBhY3RpdmVQb2xlcykgewogICAgICAgIGNvbnN0IGV4cGVjdGVkID0gcmVmZXJlbnRzW3BvbGUuaWRdIHx8ICIiOwogICAgICAgIGNvbnN0IGFjdHVhbCA9IChzYXZlZExpbmtzID8/IFtdKS5maW5kKChsOiBhbnkpID0+IGwucG9sZV9pZCA9PT0gcG9sZS5pZCk/Lm1lbWJlcl9pZCB8fCAiIjsKICAgICAgICBpZiAoYWN0dWFsICE9PSBleHBlY3RlZCkgdGhyb3cgbmV3IEVycm9yKGBWw6lyaWZpY2F0aW9uIMOpY2hvdcOpZSBwb3VyICR7cG9sZS5uYW1lfS4gQXVjdW4gbWVzc2FnZSBkZSBzdWNjw6hzIG7igJlhIMOpdMOpIHZhbGlkw6kuYCk7CiAgICAgIH0KICAgIH0sCiAgICBvblN1Y2Nlc3M6IGFzeW5jICgpID0+IHsKICAgICAgYXdhaXQgUHJvbWlzZS5hbGwoWwogICAgICAgIHFjLmludmFsaWRhdGVRdWVyaWVzKHsgcXVlcnlLZXk6IFsiYXBwLXNldHRpbmdzIl0gfSksCiAgICAgICAgcWMuaW52YWxpZGF0ZVF1ZXJpZXMoeyBxdWVyeUtleTogWyJtZW1iZXJzIl0gfSksCiAgICAgICAgcWMuaW52YWxpZGF0ZVF1ZXJpZXMoeyBxdWVyeUtleTogWyJjdXJyZW50LXJvbGUiXSB9KSwKICAgICAgXSk7CiAgICAgIHRvYXN0LnN1Y2Nlc3MoIk9yZ2FuaXNhdGlvbiByw6llbGxlbWVudCBlbnJlZ2lzdHLDqWUgZXQgdsOpcmlmacOpZSIpOwogICAgfSwKICAgIG9uRXJyb3I6IChlOiBhbnkpID0+IHRvYXN0LmVycm9yKCJFbnJlZ2lzdHJlbWVudCBpbXBvc3NpYmxlIiwgeyBkZXNjcmlwdGlvbjogZS5tZXNzYWdlIH0pLAogIH0pOwogIGlmICghY2FuRWRpdCk=').decode()
           ns,n=re.subn(pattern,replacement,s,flags=re.S)
           if n!=1:
             raise SystemExit(f'Expected one saveOrg block, found {n}')
