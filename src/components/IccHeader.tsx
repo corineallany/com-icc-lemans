@@ -10,8 +10,12 @@ import { NotificationBell } from "@/components/NotificationBell";
 
 function readPeriod():DashboardPeriod{
   if(typeof window==="undefined")return"month";
-  const saved=window.localStorage.getItem("icc-dashboard-period") as DashboardPeriod|null;
-  return saved&&Object.keys(PERIOD_LABELS).includes(saved)?saved:"month";
+  try{
+    const saved=window.localStorage.getItem("icc-dashboard-period") as DashboardPeriod|null;
+    return saved&&Object.keys(PERIOD_LABELS).includes(saved)?saved:"month";
+  }catch{
+    return"month";
+  }
 }
 
 export function IccHeader() {
@@ -31,7 +35,7 @@ export function IccHeader() {
   function changePeriod(value:DashboardPeriod){
     setPeriod(value);
     if(typeof window!=="undefined"){
-      window.localStorage.setItem("icc-dashboard-period",value);
+      try{window.localStorage.setItem("icc-dashboard-period",value);}catch{}
       window.dispatchEvent(new Event("icc-dashboard-period-change"));
     }
   }
