@@ -65,11 +65,12 @@ export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isSta
       if (!memberId) throw new Error("Compte non lié à un membre.");
       const db = supabase as any;
       if (checked) {
-        const { error } = await db.from("program_member_slot_choices").upsert(
-          { program_id: programId, member_id: memberId, service_slot_id: slotId },
-          { onConflict: "program_id,member_id,service_slot_id" },
-        );
-        if (error) throw error;
+        const { error } = await db.from("program_member_slot_choices").insert({
+          program_id: programId,
+          member_id: memberId,
+          service_slot_id: slotId,
+        });
+        if (error && !String(error.code ?? "").includes("23505")) throw error;
       } else {
         const { error } = await db
           .from("program_member_slot_choices")
