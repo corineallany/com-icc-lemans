@@ -21,24 +21,36 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          # Keep technical route/table/query identifiers unchanged. Only visible wording changes.
+          # Technical route/table/query identifiers remain unchanged. Only visible vocabulary changes.
           general = {
               'Sollicitations ponctuelles': 'Demandes ponctuelles',
               'Sollicitations': 'Demandes ponctuelles',
           }
-          specific = {
-              'Nouvelle sollicitation ponctuelle': 'Nouvelle demande ponctuelle',
-              '+ Nouvelle sollicitation': '+ Nouvelle demande',
-              'Aucune sollicitation': 'Aucune demande ponctuelle',
-              'Modifier la sollicitation': 'Modifier la demande ponctuelle',
-              'Nouvelle sollicitation': 'Nouvelle demande ponctuelle',
-              'Réponse à une sollicitation': 'Réponse à une demande ponctuelle',
-              'Sollicitation modifiée': 'Demande ponctuelle modifiée',
-              'Sollicitation créée et envoyée': 'Demande ponctuelle créée et envoyée',
-              'Sollicitation annulée': 'Demande ponctuelle annulée',
-              'La sollicitation peut attribuer des créneaux précis ou laisser chaque membre': 'La demande ponctuelle peut attribuer des créneaux précis ou laisser chaque membre',
-              'personne(s) sollicitée(s)': 'personne(s) destinataire(s)',
-              '?? "Sollicitation"': '?? "Demande ponctuelle"',
+          file_specific = {
+              'src/routes/_authenticated/sollicitations.tsx': {
+                  'Nouvelle sollicitation ponctuelle': 'Nouvelle demande ponctuelle',
+                  '+ Nouvelle sollicitation': '+ Nouvelle demande',
+                  'Aucune sollicitation': 'Aucune demande ponctuelle',
+                  'Modifier la sollicitation': 'Modifier la demande ponctuelle',
+                  'Nouvelle sollicitation': 'Nouvelle demande ponctuelle',
+                  'Réponse à une sollicitation': 'Réponse à une demande ponctuelle',
+                  'Sollicitation modifiée': 'Demande ponctuelle modifiée',
+                  'Sollicitation créée et envoyée': 'Demande ponctuelle créée et envoyée',
+                  'Sollicitation annulée': 'Demande ponctuelle annulée',
+                  'La sollicitation peut attribuer des créneaux précis ou laisser chaque membre': 'La demande ponctuelle peut attribuer des créneaux précis ou laisser chaque membre',
+                  'personne(s) sollicitée(s)': 'personne(s) destinataire(s)',
+                  '?? "Sollicitation"': '?? "Demande ponctuelle"',
+              },
+              'src/routes/_authenticated/pole.$id.tsx': {
+                  'Aucune sollicitation en cours pour ce pôle.': 'Aucune demande ponctuelle en cours pour ce pôle.',
+              },
+              'src/lib/icc.ts': {
+                  'Nouvelle sollicitation ponctuelle': 'Nouvelle demande ponctuelle',
+                  'Sollicitation ponctuelle modifiée ou annulée': 'Demande ponctuelle modifiée ou annulée',
+                  'Je suis retenu(e) après une sollicitation': 'Je suis retenu(e) après une demande ponctuelle',
+                  'Réponse reçue à une sollicitation que je pilote': 'Réponse reçue à une demande ponctuelle que je pilote',
+                  'Rappel avant échéance d’une sollicitation': 'Rappel avant échéance d’une demande ponctuelle',
+              },
           }
 
           for p in Path('src').rglob('*'):
@@ -48,16 +60,17 @@ jobs:
               old = s
               for a,b in general.items():
                   s = s.replace(a,b)
-              if p.as_posix().endswith('src/routes/_authenticated/sollicitations.tsx'):
-                  for a,b in specific.items():
-                      s = s.replace(a,b)
+              for a,b in file_specific.get(p.as_posix(), {}).items():
+                  s = s.replace(a,b)
               if s != old:
                   p.write_text(s)
                   print('updated', p)
           PY
-      - name: Verify legacy visible labels are gone
+      - name: Verify module wording
         run: |
-          ! grep -RIn --include='*.tsx' --include='*.ts' -E 'Sollicitations ponctuelles|>Sollicitations<|"Sollicitations"|Nouvelle sollicitation ponctuelle|Aucune sollicitation|Modifier la sollicitation|Sollicitation (modifiée|créée et envoyée|annulée)|Réponse à une sollicitation' src
+          ! grep -nE 'Sollicitations ponctuelles|Nouvelle sollicitation ponctuelle|Aucune sollicitation|Modifier la sollicitation|Sollicitation (modifiée|créée et envoyée|annulée)|Réponse à une sollicitation|personne\(s\) sollicitée\(s\)' src/routes/_authenticated/sollicitations.tsx
+          ! grep -n 'Aucune sollicitation en cours pour ce pôle.' 'src/routes/_authenticated/pole.$id.tsx'
+          ! grep -nE 'Nouvelle sollicitation ponctuelle|Sollicitation ponctuelle modifiée ou annulée|après une sollicitation|à une sollicitation que je pilote|d’une sollicitation' src/lib/icc.ts
       - name: Build
         run: |
           npm install --no-audit --no-fund
