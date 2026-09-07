@@ -6,6 +6,7 @@ import { useCurrentRole } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { ProgramMemberSlotChooser } from "@/components/programs/ProgramMemberSlotChooser";
 
 type Assignment = { id: string; pole_id: string; required_count?: number | null; memberIds: string[] };
 type Props = { programId: string; programTitle: string; assignments: Assignment[]; members: any[]; poles: any[] };
@@ -26,6 +27,19 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const qc = useQueryClient();
   const [note, setNote] = useState<Record<string, string>>({});
   const [direct, setDirect] = useState<Record<string, string>>({});
+
+  const programConfig = useQuery({
+    queryKey: ["program-slot-config", programId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("programs")
+        .select("detailed_scheduling,slot_selection_mode")
+        .eq("id", programId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const proposals = useQuery({
     queryKey: ["program-proposals", programId],
@@ -65,8 +79,6 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
-  // Single source of truth for staff candidate lists: a member only appears under
-  // a pole if member_poles explicitly links that member to that pole.
   const programPoleMemberships = useQuery({
     queryKey: ["program-pole-memberships", programId, assignments.map((a) => a.pole_id).sort().join(",")],
     enabled: assignments.length > 0,
@@ -104,6 +116,9 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const membershipKeys = useMemo(
     () => new Set((programPoleMemberships.data ?? []).map((x: any) => `${x.pole_id}::${x.member_id}`)),
     [programPoleMemberships.data],
+  );
+  const canChooseSlots = !!member?.id && (modes.data ?? []).some(
+    (x: any) => x.member_id === member.id && x.process_status !== "covered",
   );
 
   const refresh = () => {
@@ -189,6 +204,16 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           Transparence : affectations, sollicitations et propositions horodatées sont visibles par l’équipe. Les notes de proposition restent réservées aux responsables.
         </p>
       </div>
+
+      {programConfig.data?.detailed_scheduling && programConfig.data?.slot_selection_mode === "member" ? (
+        <ProgramMemberSlotChooser
+          programId={programId}
+          memberId={member?.id}
+          canChoose={canChooseSlots}
+          isStaff={isStaff}
+          members={members}
+        />
+      ) : null}
 
       {assignments.map((a) => {
         const required = a.required_count || 0;
