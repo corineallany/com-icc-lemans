@@ -88,8 +88,7 @@ export function ProgramServiceSlotsEditor(props: Props) {
                 <span>
                   <b>Laisser le membre choisir ses créneaux</b>
                   <small className="block text-muted-foreground">
-                    Le membre indique les créneaux qui lui conviennent, puis un responsable le
-                    retient ou non.
+                    Le membre choisira directement dans la fiche du programme, dans le bloc « Mes créneaux ». Le responsable verra ensuite tous les choix reçus avant l’affectation finale.
                   </small>
                 </span>
               </label>
