@@ -1,8 +1,6 @@
 name: Patch program participation UI
 on:
-  push:
-    paths:
-      - '.github/workflows/patch-program-participation.yml'
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -10,27 +8,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Wire participation panel into program sheet
+      - name: Verify participation panel wiring
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('src/routes/_authenticated/programme.$id.tsx')
           s=p.read_text()
-          imp='import { ProgramParticipationPanel } from "@/components/programs/ProgramParticipationPanel";\n'
-          if imp not in s:
-              anchor='import { ProgramFullExport } from "@/components/programs/ProgramFullExport";\n'
-              s=s.replace(anchor,anchor+imp)
-          panel='''\n      <ProgramParticipationPanel\n        programId={id}\n        programTitle={program.title}\n        assignments={program.assignments as any}\n        members={(members.data?.members ?? []) as any}\n        poles={(poles.data ?? []) as any}\n      />\n'''
-          if '<ProgramParticipationPanel' not in s:
-              pos=s.rfind('</AppShell>')
-              if pos<0: raise SystemExit('AppShell closing marker not found')
-              s=s[:pos]+panel+s[pos:]
-          p.write_text(s)
+          required=[
+            'import { ProgramParticipationPanel } from "@/components/programs/ProgramParticipationPanel";',
+            '<ProgramParticipationPanel',
+          ]
+          missing=[x for x in required if x not in s]
+          if missing:
+              raise SystemExit(f'Missing participation wiring: {missing}')
+          print('Program participation panel is wired correctly.')
           PY
-      - name: Commit patch
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add 'src/routes/_authenticated/programme.$id.tsx'
-          git diff --cached --quiet || git commit -m 'feat: wire program participation into program sheet'
-          git push
