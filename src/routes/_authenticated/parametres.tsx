@@ -119,48 +119,36 @@ function Parametres() {
         structure === "responsable_general_grands_groupes"
           ? { communication: commLead || null, audiovisuel: avLead || null }
           : {};
-      const { error } = await supabase
-        .from("app_settings")
-        .update({
-          direction_structure: structure,
-          supervisor_member_id: responsable || null,
-          adjoint_member_id: structure === "responsable_adjoint" ? adjoint || null : null,
-          group_leads,
-          updated_at: new Date().toISOString(),
-        } as any)
-        .eq("id", "main");
+      const { data, error } = await (supabase as any).rpc("save_organization_settings", {
+        p_direction_structure: structure,
+        p_supervisor_member_id: responsable || "",
+        p_adjoint_member_id: structure === "responsable_adjoint" ? adjoint || "" : "",
+        p_group_leads: group_leads,
+        p_referents: referents,
+      });
       if (error) throw error;
-      for (const p of activePoles) {
-        const current = (members.data?.links ?? []).filter(
-          (l: any) => l.pole_id === p.id && l.is_referent,
-        );
-        if (current.length)
-          await supabase
-            .from("member_poles")
-            .update({ is_referent: false })
-            .in(
-              "id",
-              current.map((l: any) => l.id),
-            );
-        const mid = referents[p.id];
-        if (!mid) continue;
-        const existing = (members.data?.links ?? []).find(
-          (l: any) => l.pole_id === p.id && l.member_id === mid,
-        );
-        if (existing)
-          await supabase.from("member_poles").update({ is_referent: true }).eq("id", existing.id);
-        else
-          await supabase
-            .from("member_poles")
-            .insert({ member_id: mid, pole_id: p.id, is_referent: true });
+      if (!data?.success) throw new Error("L’organisation n’a pas été confirmée par le serveur.");
+
+      const { data: savedLinks, error: verifyError } = await supabase
+        .from("member_poles")
+        .select("pole_id,member_id,is_referent")
+        .eq("is_referent", true);
+      if (verifyError) throw verifyError;
+      for (const pole of activePoles) {
+        const expected = referents[pole.id] || "";
+        const actual = (savedLinks ?? []).find((l: any) => l.pole_id === pole.id)?.member_id || "";
+        if (actual !== expected) throw new Error(`Vérification échouée pour ${pole.name}. Aucun message de succès n’a été validé.`);
       }
     },
     onSuccess: async () => {
-      toast.success("Organisation enregistrée");
-      await qc.invalidateQueries({ queryKey: ["app-settings"] });
-      await qc.invalidateQueries({ queryKey: ["members"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["app-settings"] }),
+        qc.invalidateQueries({ queryKey: ["members"] }),
+        qc.invalidateQueries({ queryKey: ["current-role"] }),
+      ]);
+      toast.success("Organisation réellement enregistrée et vérifiée");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error("Enregistrement impossible", { description: e.message }),
   });
   if (!canEdit)
     return <ReadOnlySettings settings={s} members={activeMembers} poles={activePoles} />;
