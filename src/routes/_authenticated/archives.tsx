@@ -28,7 +28,7 @@ const TABLE_LABEL: Record<TableName, string> = {
   programs: "Programme", solicitations: "Sollicitation", poles: "Pôle", program_models: "Modèle", members: "Membre", team_life_events: "Vie d’équipe", member_training_paths: "Formation attribuée",
 };
 const FILTERS: Array<{ value: "all" | TableName; label: string }> = [
-  { value: "all", label: "Tous" }, { value: "programs", label: "Programmes" }, { value: "solicitations", label: "Sollicitations" },
+  { value: "all", label: "Tous" }, { value: "programs", label: "Programmes" }, { value: "solicitations", label: "Demandes ponctuelles" },
   { value: "members", label: "Membres" }, { value: "member_training_paths", label: "Formations attribuées" }, { value: "poles", label: "Pôles" }, { value: "program_models", label: "Modèles" }, { value: "team_life_events", label: "Vie d’équipe" },
 ];
 const db = () => supabase as any;

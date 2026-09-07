@@ -22,7 +22,7 @@ export const DEFAULT_MENU_MODULES: MenuModule[] = [
   { key: "formations", label: "Formations", enabled: true, menuVisible: true, order: 40 },
   {
     key: "sollicitations",
-    label: "Sollicitations ponctuelles",
+    label: "Demandes ponctuelles",
     enabled: true,
     menuVisible: true,
     order: 50,

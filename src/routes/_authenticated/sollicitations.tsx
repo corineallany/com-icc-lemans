@@ -356,7 +356,7 @@ function Sollicitations() {
     mids.delete(r.member_id);
     await notifyMembers(
       [...mids],
-      "Réponse à une sollicitation",
+      "Réponse à une demande ponctuelle",
       `${memberName(r.member_id)} : ${label} · ${programName(s.program_id)}`,
       s.id,
     );
@@ -548,7 +548,7 @@ function Sollicitations() {
       if (!form.id && newIds.length)
         await notifyMembers(
           newIds,
-          "Nouvelle sollicitation",
+          "Nouvelle demande ponctuelle",
           `${p.title} · réponse avant le ${formatDate(form.response_deadline)}`,
           id,
         );
@@ -561,7 +561,7 @@ function Sollicitations() {
       });
     },
     onSuccess: async () => {
-      toast.success(form.id ? "Sollicitation modifiée" : "Sollicitation créée et envoyée");
+      toast.success(form.id ? "Demande ponctuelle modifiée" : "Demande ponctuelle créée et envoyée");
       setFormOpen(false);
       await refresh();
     },
@@ -825,13 +825,13 @@ function Sollicitations() {
       if (error) throw error;
       await notifyMembers(
         recs(s.id).map((r) => r.member_id),
-        "Sollicitation annulée",
+        "Demande ponctuelle annulée",
         `${programName(s.program_id)} · ${note || "La demande a été annulée."}`,
         s.id,
       );
     },
     onSuccess: async () => {
-      toast.success("Sollicitation annulée");
+      toast.success("Demande ponctuelle annulée");
       setDetail(null);
       await refresh();
     },
@@ -887,12 +887,12 @@ function Sollicitations() {
 
   return (
     <AppShell
-      title="Sollicitations ponctuelles"
+      title="Demandes ponctuelles"
       subtitle="Renforts, remplacements et sélection opérationnelle"
     >
       <div className="space-y-4">
         <div className="flex justify-end">
-          {isStaff ? <Button onClick={openNew}>+ Nouvelle sollicitation</Button> : null}
+          {isStaff ? <Button onClick={openNew}>+ Nouvelle demande</Button> : null}
         </div>
         <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
           <Input
@@ -938,7 +938,7 @@ function Sollicitations() {
           />
         </div>
         {!rows.length ? (
-          <EmptyState title="Aucune sollicitation" />
+          <EmptyState title="Aucune demande ponctuelle" />
         ) : (
           <div className="space-y-4">
             {rows.map((s: any) => {
@@ -957,7 +957,7 @@ function Sollicitations() {
                       <div>
                         <CardTitle className="text-lg">{programName(s.program_id)}</CardTitle>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {NLABEL[s.nature] ?? "Sollicitation"} · {formatDate(s.event_date)}
+                          {NLABEL[s.nature] ?? "Demande ponctuelle"} · {formatDate(s.event_date)}
                         </p>
                       </div>
                       <Badge variant={agg === "pending" ? "outline" : "secondary"}>
@@ -972,7 +972,7 @@ function Sollicitations() {
                       <b>Date limite :</b> {deadlineText(s.response_deadline)}
                     </p>
                     <p>
-                      <b>{rs.length}</b> personne(s) sollicitée(s) ·{" "}
+                      <b>{rs.length}</b> personne(s) destinataire(s) ·{" "}
                       <b>{rs.filter((r) => r.selected).length}</b> retenue(s)
                     </p>
                     {remaining > 0 ? (
@@ -994,7 +994,7 @@ function Sollicitations() {
         <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {form.id ? "Modifier la sollicitation" : "Nouvelle sollicitation ponctuelle"}
+              {form.id ? "Modifier la demande ponctuelle" : "Nouvelle demande ponctuelle"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
@@ -1068,7 +1068,7 @@ function Sollicitations() {
                 <div>
                   <h3 className="font-black text-icc-violet">Créneaux proposés</h3>
                   <p className="text-xs text-muted-foreground">
-                    La sollicitation peut attribuer des créneaux précis ou laisser chaque membre
+                    La demande ponctuelle peut attribuer des créneaux précis ou laisser chaque membre
                     choisir parmi ceux-ci.
                   </p>
                 </div>
@@ -1256,7 +1256,7 @@ function Sollicitations() {
               </DialogHeader>
               <div className="space-y-5">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <Info label="Nature" value={NLABEL[detail.nature] ?? "Sollicitation"} />
+                  <Info label="Nature" value={NLABEL[detail.nature] ?? "Demande ponctuelle"} />
                   <Info label="Date" value={formatDate(detail.event_date)} />
                   <Info label="Date limite" value={deadlineText(detail.response_deadline)} />
                   <Info

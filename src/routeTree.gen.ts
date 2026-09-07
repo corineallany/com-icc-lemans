@@ -15,27 +15,47 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAFaireRouteImport } from './routes/_authenticated/a-faire'
 import { Route as AuthenticatedAdministrationRouteImport } from './routes/_authenticated/administration'
 import { Route as AuthenticatedArchivesRouteImport } from './routes/_authenticated/archives'
+import { Route as AuthenticatedCaisseCorrectionsRouteImport } from './routes/_authenticated/caisse-corrections'
+import { Route as AuthenticatedCaisseFraternelleRouteImport } from './routes/_authenticated/caisse-fraternelle'
 import { Route as AuthenticatedConflitsRouteImport } from './routes/_authenticated/conflits'
+import { Route as AuthenticatedDecouvrirModuleRouteImport } from './routes/_authenticated/decouvrir-module'
 import { Route as AuthenticatedDisponibilitesRouteImport } from './routes/_authenticated/disponibilites'
 import { Route as AuthenticatedEvaluationsRouteImport } from './routes/_authenticated/evaluations'
 import { Route as AuthenticatedExportsRouteImport } from './routes/_authenticated/exports'
+import { Route as AuthenticatedFormationsRouteImport } from './routes/_authenticated/formations'
 import { Route as AuthenticatedHistoriqueRouteImport } from './routes/_authenticated/historique'
+import { Route as AuthenticatedMaterielComRouteImport } from './routes/_authenticated/materiel-com'
+import { Route as AuthenticatedMaterielMouvementsRouteImport } from './routes/_authenticated/materiel-mouvements'
+import { Route as AuthenticatedMesAppareilsRouteImport } from './routes/_authenticated/mes-appareils'
+import { Route as AuthenticatedMesDemandesRouteImport } from './routes/_authenticated/mes-demandes'
 import { Route as AuthenticatedMesServicesRouteImport } from './routes/_authenticated/mes-services'
 import { Route as AuthenticatedModelesRouteImport } from './routes/_authenticated/modeles'
 import { Route as AuthenticatedMonPlanningRouteImport } from './routes/_authenticated/mon-planning'
 import { Route as AuthenticatedMonProfilRouteImport } from './routes/_authenticated/mon-profil'
+import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
 import { Route as AuthenticatedParametresRouteImport } from './routes/_authenticated/parametres'
+import { Route as AuthenticatedParametresFinancesRouteImport } from './routes/_authenticated/parametres-finances'
+import { Route as AuthenticatedParametresMaterielRouteImport } from './routes/_authenticated/parametres-materiel'
+import { Route as AuthenticatedParametresVieEquipeRouteImport } from './routes/_authenticated/parametres-vie-equipe'
 import { Route as AuthenticatedPilotageRouteImport } from './routes/_authenticated/pilotage'
 import { Route as AuthenticatedPlanningRouteImport } from './routes/_authenticated/planning'
 import { Route as AuthenticatedPolesRouteImport } from './routes/_authenticated/poles'
 import { Route as AuthenticatedPostServiceRouteImport } from './routes/_authenticated/post-service'
+import { Route as AuthenticatedPreferencesNotificationsRouteImport } from './routes/_authenticated/preferences-notifications'
 import { Route as AuthenticatedProgrammesRouteImport } from './routes/_authenticated/programmes'
+import { Route as AuthenticatedReceptionMaterielRouteImport } from './routes/_authenticated/reception-materiel'
 import { Route as AuthenticatedRechercheRouteImport } from './routes/_authenticated/recherche'
 import { Route as AuthenticatedSollicitationsRouteImport } from './routes/_authenticated/sollicitations'
+import { Route as AuthenticatedSuiviMaterielRouteImport } from './routes/_authenticated/suivi-materiel'
 import { Route as AuthenticatedTableauDeBordRouteImport } from './routes/_authenticated/tableau-de-bord'
 import { Route as AuthenticatedTachesRouteImport } from './routes/_authenticated/taches'
 import { Route as AuthenticatedTrombinoscopeRouteImport } from './routes/_authenticated/trombinoscope'
+import { Route as AuthenticatedVieEquipeRouteImport } from './routes/_authenticated/vie-equipe'
+import { Route as AuthenticatedDemandeMaterielIdRouteImport } from './routes/_authenticated/demande-materiel.$id'
+import { Route as AuthenticatedMembreIdRouteImport } from './routes/_authenticated/membre.$id'
+import { Route as AuthenticatedPoleIdRouteImport } from './routes/_authenticated/pole.$id'
 import { Route as AuthenticatedProgrammeIdRouteImport } from './routes/_authenticated/programme.$id'
+import { Route as AuthenticatedReporterProgrammeIdRouteImport } from './routes/_authenticated/reporter-programme.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -67,11 +87,29 @@ const AuthenticatedArchivesRoute = AuthenticatedArchivesRouteImport.update({
   path: '/archives',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCaisseCorrectionsRoute =
+  AuthenticatedCaisseCorrectionsRouteImport.update({
+    id: '/caisse-corrections',
+    path: '/caisse-corrections',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCaisseFraternelleRoute =
+  AuthenticatedCaisseFraternelleRouteImport.update({
+    id: '/caisse-fraternelle',
+    path: '/caisse-fraternelle',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedConflitsRoute = AuthenticatedConflitsRouteImport.update({
   id: '/conflits',
   path: '/conflits',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDecouvrirModuleRoute =
+  AuthenticatedDecouvrirModuleRouteImport.update({
+    id: '/decouvrir-module',
+    path: '/decouvrir-module',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDisponibilitesRoute =
   AuthenticatedDisponibilitesRouteImport.update({
     id: '/disponibilites',
@@ -89,11 +127,40 @@ const AuthenticatedExportsRoute = AuthenticatedExportsRouteImport.update({
   path: '/exports',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedFormationsRoute = AuthenticatedFormationsRouteImport.update({
+  id: '/formations',
+  path: '/formations',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedHistoriqueRoute = AuthenticatedHistoriqueRouteImport.update({
   id: '/historique',
   path: '/historique',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedMaterielComRoute =
+  AuthenticatedMaterielComRouteImport.update({
+    id: '/materiel-com',
+    path: '/materiel-com',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMaterielMouvementsRoute =
+  AuthenticatedMaterielMouvementsRouteImport.update({
+    id: '/materiel-mouvements',
+    path: '/materiel-mouvements',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMesAppareilsRoute =
+  AuthenticatedMesAppareilsRouteImport.update({
+    id: '/mes-appareils',
+    path: '/mes-appareils',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMesDemandesRoute =
+  AuthenticatedMesDemandesRouteImport.update({
+    id: '/mes-demandes',
+    path: '/mes-demandes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedMesServicesRoute =
   AuthenticatedMesServicesRouteImport.update({
     id: '/mes-services',
@@ -116,11 +183,35 @@ const AuthenticatedMonProfilRoute = AuthenticatedMonProfilRouteImport.update({
   path: '/mon-profil',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedNotificationsRoute =
+  AuthenticatedNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedParametresRoute = AuthenticatedParametresRouteImport.update({
   id: '/parametres',
   path: '/parametres',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedParametresFinancesRoute =
+  AuthenticatedParametresFinancesRouteImport.update({
+    id: '/parametres-finances',
+    path: '/parametres-finances',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedParametresMaterielRoute =
+  AuthenticatedParametresMaterielRouteImport.update({
+    id: '/parametres-materiel',
+    path: '/parametres-materiel',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedParametresVieEquipeRoute =
+  AuthenticatedParametresVieEquipeRouteImport.update({
+    id: '/parametres-vie-equipe',
+    path: '/parametres-vie-equipe',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPilotageRoute = AuthenticatedPilotageRouteImport.update({
   id: '/pilotage',
   path: '/pilotage',
@@ -142,11 +233,23 @@ const AuthenticatedPostServiceRoute =
     path: '/post-service',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedPreferencesNotificationsRoute =
+  AuthenticatedPreferencesNotificationsRouteImport.update({
+    id: '/preferences-notifications',
+    path: '/preferences-notifications',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProgrammesRoute = AuthenticatedProgrammesRouteImport.update({
   id: '/programmes',
   path: '/programmes',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedReceptionMaterielRoute =
+  AuthenticatedReceptionMaterielRouteImport.update({
+    id: '/reception-materiel',
+    path: '/reception-materiel',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRechercheRoute = AuthenticatedRechercheRouteImport.update({
   id: '/recherche',
   path: '/recherche',
@@ -156,6 +259,12 @@ const AuthenticatedSollicitationsRoute =
   AuthenticatedSollicitationsRouteImport.update({
     id: '/sollicitations',
     path: '/sollicitations',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSuiviMaterielRoute =
+  AuthenticatedSuiviMaterielRouteImport.update({
+    id: '/suivi-materiel',
+    path: '/suivi-materiel',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedTableauDeBordRoute =
@@ -175,10 +284,37 @@ const AuthenticatedTrombinoscopeRoute =
     path: '/trombinoscope',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedVieEquipeRoute = AuthenticatedVieEquipeRouteImport.update({
+  id: '/vie-equipe',
+  path: '/vie-equipe',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDemandeMaterielIdRoute =
+  AuthenticatedDemandeMaterielIdRouteImport.update({
+    id: '/demande-materiel/$id',
+    path: '/demande-materiel/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedMembreIdRoute = AuthenticatedMembreIdRouteImport.update({
+  id: '/membre/$id',
+  path: '/membre/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPoleIdRoute = AuthenticatedPoleIdRouteImport.update({
+  id: '/pole/$id',
+  path: '/pole/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProgrammeIdRoute =
   AuthenticatedProgrammeIdRouteImport.update({
     id: '/programme/$id',
     path: '/programme/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedReporterProgrammeIdRoute =
+  AuthenticatedReporterProgrammeIdRouteImport.update({
+    id: '/reporter-programme/$id',
+    path: '/reporter-programme/$id',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 
@@ -188,27 +324,47 @@ export interface FileRoutesByFullPath {
   '/a-faire': typeof AuthenticatedAFaireRoute
   '/administration': typeof AuthenticatedAdministrationRoute
   '/archives': typeof AuthenticatedArchivesRoute
+  '/caisse-corrections': typeof AuthenticatedCaisseCorrectionsRoute
+  '/caisse-fraternelle': typeof AuthenticatedCaisseFraternelleRoute
   '/conflits': typeof AuthenticatedConflitsRoute
+  '/decouvrir-module': typeof AuthenticatedDecouvrirModuleRoute
   '/disponibilites': typeof AuthenticatedDisponibilitesRoute
   '/evaluations': typeof AuthenticatedEvaluationsRoute
   '/exports': typeof AuthenticatedExportsRoute
+  '/formations': typeof AuthenticatedFormationsRoute
   '/historique': typeof AuthenticatedHistoriqueRoute
+  '/materiel-com': typeof AuthenticatedMaterielComRoute
+  '/materiel-mouvements': typeof AuthenticatedMaterielMouvementsRoute
+  '/mes-appareils': typeof AuthenticatedMesAppareilsRoute
+  '/mes-demandes': typeof AuthenticatedMesDemandesRoute
   '/mes-services': typeof AuthenticatedMesServicesRoute
   '/modeles': typeof AuthenticatedModelesRoute
   '/mon-planning': typeof AuthenticatedMonPlanningRoute
   '/mon-profil': typeof AuthenticatedMonProfilRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/parametres': typeof AuthenticatedParametresRoute
+  '/parametres-finances': typeof AuthenticatedParametresFinancesRoute
+  '/parametres-materiel': typeof AuthenticatedParametresMaterielRoute
+  '/parametres-vie-equipe': typeof AuthenticatedParametresVieEquipeRoute
   '/pilotage': typeof AuthenticatedPilotageRoute
   '/planning': typeof AuthenticatedPlanningRoute
   '/poles': typeof AuthenticatedPolesRoute
   '/post-service': typeof AuthenticatedPostServiceRoute
+  '/preferences-notifications': typeof AuthenticatedPreferencesNotificationsRoute
   '/programmes': typeof AuthenticatedProgrammesRoute
+  '/reception-materiel': typeof AuthenticatedReceptionMaterielRoute
   '/recherche': typeof AuthenticatedRechercheRoute
   '/sollicitations': typeof AuthenticatedSollicitationsRoute
+  '/suivi-materiel': typeof AuthenticatedSuiviMaterielRoute
   '/tableau-de-bord': typeof AuthenticatedTableauDeBordRoute
   '/taches': typeof AuthenticatedTachesRoute
   '/trombinoscope': typeof AuthenticatedTrombinoscopeRoute
+  '/vie-equipe': typeof AuthenticatedVieEquipeRoute
+  '/demande-materiel/$id': typeof AuthenticatedDemandeMaterielIdRoute
+  '/membre/$id': typeof AuthenticatedMembreIdRoute
+  '/pole/$id': typeof AuthenticatedPoleIdRoute
   '/programme/$id': typeof AuthenticatedProgrammeIdRoute
+  '/reporter-programme/$id': typeof AuthenticatedReporterProgrammeIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -216,27 +372,47 @@ export interface FileRoutesByTo {
   '/a-faire': typeof AuthenticatedAFaireRoute
   '/administration': typeof AuthenticatedAdministrationRoute
   '/archives': typeof AuthenticatedArchivesRoute
+  '/caisse-corrections': typeof AuthenticatedCaisseCorrectionsRoute
+  '/caisse-fraternelle': typeof AuthenticatedCaisseFraternelleRoute
   '/conflits': typeof AuthenticatedConflitsRoute
+  '/decouvrir-module': typeof AuthenticatedDecouvrirModuleRoute
   '/disponibilites': typeof AuthenticatedDisponibilitesRoute
   '/evaluations': typeof AuthenticatedEvaluationsRoute
   '/exports': typeof AuthenticatedExportsRoute
+  '/formations': typeof AuthenticatedFormationsRoute
   '/historique': typeof AuthenticatedHistoriqueRoute
+  '/materiel-com': typeof AuthenticatedMaterielComRoute
+  '/materiel-mouvements': typeof AuthenticatedMaterielMouvementsRoute
+  '/mes-appareils': typeof AuthenticatedMesAppareilsRoute
+  '/mes-demandes': typeof AuthenticatedMesDemandesRoute
   '/mes-services': typeof AuthenticatedMesServicesRoute
   '/modeles': typeof AuthenticatedModelesRoute
   '/mon-planning': typeof AuthenticatedMonPlanningRoute
   '/mon-profil': typeof AuthenticatedMonProfilRoute
+  '/notifications': typeof AuthenticatedNotificationsRoute
   '/parametres': typeof AuthenticatedParametresRoute
+  '/parametres-finances': typeof AuthenticatedParametresFinancesRoute
+  '/parametres-materiel': typeof AuthenticatedParametresMaterielRoute
+  '/parametres-vie-equipe': typeof AuthenticatedParametresVieEquipeRoute
   '/pilotage': typeof AuthenticatedPilotageRoute
   '/planning': typeof AuthenticatedPlanningRoute
   '/poles': typeof AuthenticatedPolesRoute
   '/post-service': typeof AuthenticatedPostServiceRoute
+  '/preferences-notifications': typeof AuthenticatedPreferencesNotificationsRoute
   '/programmes': typeof AuthenticatedProgrammesRoute
+  '/reception-materiel': typeof AuthenticatedReceptionMaterielRoute
   '/recherche': typeof AuthenticatedRechercheRoute
   '/sollicitations': typeof AuthenticatedSollicitationsRoute
+  '/suivi-materiel': typeof AuthenticatedSuiviMaterielRoute
   '/tableau-de-bord': typeof AuthenticatedTableauDeBordRoute
   '/taches': typeof AuthenticatedTachesRoute
   '/trombinoscope': typeof AuthenticatedTrombinoscopeRoute
+  '/vie-equipe': typeof AuthenticatedVieEquipeRoute
+  '/demande-materiel/$id': typeof AuthenticatedDemandeMaterielIdRoute
+  '/membre/$id': typeof AuthenticatedMembreIdRoute
+  '/pole/$id': typeof AuthenticatedPoleIdRoute
   '/programme/$id': typeof AuthenticatedProgrammeIdRoute
+  '/reporter-programme/$id': typeof AuthenticatedReporterProgrammeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -246,27 +422,47 @@ export interface FileRoutesById {
   '/_authenticated/a-faire': typeof AuthenticatedAFaireRoute
   '/_authenticated/administration': typeof AuthenticatedAdministrationRoute
   '/_authenticated/archives': typeof AuthenticatedArchivesRoute
+  '/_authenticated/caisse-corrections': typeof AuthenticatedCaisseCorrectionsRoute
+  '/_authenticated/caisse-fraternelle': typeof AuthenticatedCaisseFraternelleRoute
   '/_authenticated/conflits': typeof AuthenticatedConflitsRoute
+  '/_authenticated/decouvrir-module': typeof AuthenticatedDecouvrirModuleRoute
   '/_authenticated/disponibilites': typeof AuthenticatedDisponibilitesRoute
   '/_authenticated/evaluations': typeof AuthenticatedEvaluationsRoute
   '/_authenticated/exports': typeof AuthenticatedExportsRoute
+  '/_authenticated/formations': typeof AuthenticatedFormationsRoute
   '/_authenticated/historique': typeof AuthenticatedHistoriqueRoute
+  '/_authenticated/materiel-com': typeof AuthenticatedMaterielComRoute
+  '/_authenticated/materiel-mouvements': typeof AuthenticatedMaterielMouvementsRoute
+  '/_authenticated/mes-appareils': typeof AuthenticatedMesAppareilsRoute
+  '/_authenticated/mes-demandes': typeof AuthenticatedMesDemandesRoute
   '/_authenticated/mes-services': typeof AuthenticatedMesServicesRoute
   '/_authenticated/modeles': typeof AuthenticatedModelesRoute
   '/_authenticated/mon-planning': typeof AuthenticatedMonPlanningRoute
   '/_authenticated/mon-profil': typeof AuthenticatedMonProfilRoute
+  '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
   '/_authenticated/parametres': typeof AuthenticatedParametresRoute
+  '/_authenticated/parametres-finances': typeof AuthenticatedParametresFinancesRoute
+  '/_authenticated/parametres-materiel': typeof AuthenticatedParametresMaterielRoute
+  '/_authenticated/parametres-vie-equipe': typeof AuthenticatedParametresVieEquipeRoute
   '/_authenticated/pilotage': typeof AuthenticatedPilotageRoute
   '/_authenticated/planning': typeof AuthenticatedPlanningRoute
   '/_authenticated/poles': typeof AuthenticatedPolesRoute
   '/_authenticated/post-service': typeof AuthenticatedPostServiceRoute
+  '/_authenticated/preferences-notifications': typeof AuthenticatedPreferencesNotificationsRoute
   '/_authenticated/programmes': typeof AuthenticatedProgrammesRoute
+  '/_authenticated/reception-materiel': typeof AuthenticatedReceptionMaterielRoute
   '/_authenticated/recherche': typeof AuthenticatedRechercheRoute
   '/_authenticated/sollicitations': typeof AuthenticatedSollicitationsRoute
+  '/_authenticated/suivi-materiel': typeof AuthenticatedSuiviMaterielRoute
   '/_authenticated/tableau-de-bord': typeof AuthenticatedTableauDeBordRoute
   '/_authenticated/taches': typeof AuthenticatedTachesRoute
   '/_authenticated/trombinoscope': typeof AuthenticatedTrombinoscopeRoute
+  '/_authenticated/vie-equipe': typeof AuthenticatedVieEquipeRoute
+  '/_authenticated/demande-materiel/$id': typeof AuthenticatedDemandeMaterielIdRoute
+  '/_authenticated/membre/$id': typeof AuthenticatedMembreIdRoute
+  '/_authenticated/pole/$id': typeof AuthenticatedPoleIdRoute
   '/_authenticated/programme/$id': typeof AuthenticatedProgrammeIdRoute
+  '/_authenticated/reporter-programme/$id': typeof AuthenticatedReporterProgrammeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -276,27 +472,47 @@ export interface FileRouteTypes {
     | '/a-faire'
     | '/administration'
     | '/archives'
+    | '/caisse-corrections'
+    | '/caisse-fraternelle'
     | '/conflits'
+    | '/decouvrir-module'
     | '/disponibilites'
     | '/evaluations'
     | '/exports'
+    | '/formations'
     | '/historique'
+    | '/materiel-com'
+    | '/materiel-mouvements'
+    | '/mes-appareils'
+    | '/mes-demandes'
     | '/mes-services'
     | '/modeles'
     | '/mon-planning'
     | '/mon-profil'
+    | '/notifications'
     | '/parametres'
+    | '/parametres-finances'
+    | '/parametres-materiel'
+    | '/parametres-vie-equipe'
     | '/pilotage'
     | '/planning'
     | '/poles'
     | '/post-service'
+    | '/preferences-notifications'
     | '/programmes'
+    | '/reception-materiel'
     | '/recherche'
     | '/sollicitations'
+    | '/suivi-materiel'
     | '/tableau-de-bord'
     | '/taches'
     | '/trombinoscope'
+    | '/vie-equipe'
+    | '/demande-materiel/$id'
+    | '/membre/$id'
+    | '/pole/$id'
     | '/programme/$id'
+    | '/reporter-programme/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -304,27 +520,47 @@ export interface FileRouteTypes {
     | '/a-faire'
     | '/administration'
     | '/archives'
+    | '/caisse-corrections'
+    | '/caisse-fraternelle'
     | '/conflits'
+    | '/decouvrir-module'
     | '/disponibilites'
     | '/evaluations'
     | '/exports'
+    | '/formations'
     | '/historique'
+    | '/materiel-com'
+    | '/materiel-mouvements'
+    | '/mes-appareils'
+    | '/mes-demandes'
     | '/mes-services'
     | '/modeles'
     | '/mon-planning'
     | '/mon-profil'
+    | '/notifications'
     | '/parametres'
+    | '/parametres-finances'
+    | '/parametres-materiel'
+    | '/parametres-vie-equipe'
     | '/pilotage'
     | '/planning'
     | '/poles'
     | '/post-service'
+    | '/preferences-notifications'
     | '/programmes'
+    | '/reception-materiel'
     | '/recherche'
     | '/sollicitations'
+    | '/suivi-materiel'
     | '/tableau-de-bord'
     | '/taches'
     | '/trombinoscope'
+    | '/vie-equipe'
+    | '/demande-materiel/$id'
+    | '/membre/$id'
+    | '/pole/$id'
     | '/programme/$id'
+    | '/reporter-programme/$id'
   id:
     | '__root__'
     | '/'
@@ -333,27 +569,47 @@ export interface FileRouteTypes {
     | '/_authenticated/a-faire'
     | '/_authenticated/administration'
     | '/_authenticated/archives'
+    | '/_authenticated/caisse-corrections'
+    | '/_authenticated/caisse-fraternelle'
     | '/_authenticated/conflits'
+    | '/_authenticated/decouvrir-module'
     | '/_authenticated/disponibilites'
     | '/_authenticated/evaluations'
     | '/_authenticated/exports'
+    | '/_authenticated/formations'
     | '/_authenticated/historique'
+    | '/_authenticated/materiel-com'
+    | '/_authenticated/materiel-mouvements'
+    | '/_authenticated/mes-appareils'
+    | '/_authenticated/mes-demandes'
     | '/_authenticated/mes-services'
     | '/_authenticated/modeles'
     | '/_authenticated/mon-planning'
     | '/_authenticated/mon-profil'
+    | '/_authenticated/notifications'
     | '/_authenticated/parametres'
+    | '/_authenticated/parametres-finances'
+    | '/_authenticated/parametres-materiel'
+    | '/_authenticated/parametres-vie-equipe'
     | '/_authenticated/pilotage'
     | '/_authenticated/planning'
     | '/_authenticated/poles'
     | '/_authenticated/post-service'
+    | '/_authenticated/preferences-notifications'
     | '/_authenticated/programmes'
+    | '/_authenticated/reception-materiel'
     | '/_authenticated/recherche'
     | '/_authenticated/sollicitations'
+    | '/_authenticated/suivi-materiel'
     | '/_authenticated/tableau-de-bord'
     | '/_authenticated/taches'
     | '/_authenticated/trombinoscope'
+    | '/_authenticated/vie-equipe'
+    | '/_authenticated/demande-materiel/$id'
+    | '/_authenticated/membre/$id'
+    | '/_authenticated/pole/$id'
     | '/_authenticated/programme/$id'
+    | '/_authenticated/reporter-programme/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -406,11 +662,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedArchivesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/caisse-corrections': {
+      id: '/_authenticated/caisse-corrections'
+      path: '/caisse-corrections'
+      fullPath: '/caisse-corrections'
+      preLoaderRoute: typeof AuthenticatedCaisseCorrectionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/caisse-fraternelle': {
+      id: '/_authenticated/caisse-fraternelle'
+      path: '/caisse-fraternelle'
+      fullPath: '/caisse-fraternelle'
+      preLoaderRoute: typeof AuthenticatedCaisseFraternelleRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/conflits': {
       id: '/_authenticated/conflits'
       path: '/conflits'
       fullPath: '/conflits'
       preLoaderRoute: typeof AuthenticatedConflitsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/decouvrir-module': {
+      id: '/_authenticated/decouvrir-module'
+      path: '/decouvrir-module'
+      fullPath: '/decouvrir-module'
+      preLoaderRoute: typeof AuthenticatedDecouvrirModuleRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/disponibilites': {
@@ -434,11 +711,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedExportsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/formations': {
+      id: '/_authenticated/formations'
+      path: '/formations'
+      fullPath: '/formations'
+      preLoaderRoute: typeof AuthenticatedFormationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/historique': {
       id: '/_authenticated/historique'
       path: '/historique'
       fullPath: '/historique'
       preLoaderRoute: typeof AuthenticatedHistoriqueRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/materiel-com': {
+      id: '/_authenticated/materiel-com'
+      path: '/materiel-com'
+      fullPath: '/materiel-com'
+      preLoaderRoute: typeof AuthenticatedMaterielComRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/materiel-mouvements': {
+      id: '/_authenticated/materiel-mouvements'
+      path: '/materiel-mouvements'
+      fullPath: '/materiel-mouvements'
+      preLoaderRoute: typeof AuthenticatedMaterielMouvementsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/mes-appareils': {
+      id: '/_authenticated/mes-appareils'
+      path: '/mes-appareils'
+      fullPath: '/mes-appareils'
+      preLoaderRoute: typeof AuthenticatedMesAppareilsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/mes-demandes': {
+      id: '/_authenticated/mes-demandes'
+      path: '/mes-demandes'
+      fullPath: '/mes-demandes'
+      preLoaderRoute: typeof AuthenticatedMesDemandesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/mes-services': {
@@ -469,11 +781,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMonProfilRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/notifications': {
+      id: '/_authenticated/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/parametres': {
       id: '/_authenticated/parametres'
       path: '/parametres'
       fullPath: '/parametres'
       preLoaderRoute: typeof AuthenticatedParametresRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/parametres-finances': {
+      id: '/_authenticated/parametres-finances'
+      path: '/parametres-finances'
+      fullPath: '/parametres-finances'
+      preLoaderRoute: typeof AuthenticatedParametresFinancesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/parametres-materiel': {
+      id: '/_authenticated/parametres-materiel'
+      path: '/parametres-materiel'
+      fullPath: '/parametres-materiel'
+      preLoaderRoute: typeof AuthenticatedParametresMaterielRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/parametres-vie-equipe': {
+      id: '/_authenticated/parametres-vie-equipe'
+      path: '/parametres-vie-equipe'
+      fullPath: '/parametres-vie-equipe'
+      preLoaderRoute: typeof AuthenticatedParametresVieEquipeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/pilotage': {
@@ -504,11 +844,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPostServiceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/preferences-notifications': {
+      id: '/_authenticated/preferences-notifications'
+      path: '/preferences-notifications'
+      fullPath: '/preferences-notifications'
+      preLoaderRoute: typeof AuthenticatedPreferencesNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/programmes': {
       id: '/_authenticated/programmes'
       path: '/programmes'
       fullPath: '/programmes'
       preLoaderRoute: typeof AuthenticatedProgrammesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/reception-materiel': {
+      id: '/_authenticated/reception-materiel'
+      path: '/reception-materiel'
+      fullPath: '/reception-materiel'
+      preLoaderRoute: typeof AuthenticatedReceptionMaterielRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/recherche': {
@@ -523,6 +877,13 @@ declare module '@tanstack/react-router' {
       path: '/sollicitations'
       fullPath: '/sollicitations'
       preLoaderRoute: typeof AuthenticatedSollicitationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/suivi-materiel': {
+      id: '/_authenticated/suivi-materiel'
+      path: '/suivi-materiel'
+      fullPath: '/suivi-materiel'
+      preLoaderRoute: typeof AuthenticatedSuiviMaterielRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/tableau-de-bord': {
@@ -546,11 +907,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTrombinoscopeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/vie-equipe': {
+      id: '/_authenticated/vie-equipe'
+      path: '/vie-equipe'
+      fullPath: '/vie-equipe'
+      preLoaderRoute: typeof AuthenticatedVieEquipeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/demande-materiel/$id': {
+      id: '/_authenticated/demande-materiel/$id'
+      path: '/demande-materiel/$id'
+      fullPath: '/demande-materiel/$id'
+      preLoaderRoute: typeof AuthenticatedDemandeMaterielIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/membre/$id': {
+      id: '/_authenticated/membre/$id'
+      path: '/membre/$id'
+      fullPath: '/membre/$id'
+      preLoaderRoute: typeof AuthenticatedMembreIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pole/$id': {
+      id: '/_authenticated/pole/$id'
+      path: '/pole/$id'
+      fullPath: '/pole/$id'
+      preLoaderRoute: typeof AuthenticatedPoleIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/programme/$id': {
       id: '/_authenticated/programme/$id'
       path: '/programme/$id'
       fullPath: '/programme/$id'
       preLoaderRoute: typeof AuthenticatedProgrammeIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/reporter-programme/$id': {
+      id: '/_authenticated/reporter-programme/$id'
+      path: '/reporter-programme/$id'
+      fullPath: '/reporter-programme/$id'
+      preLoaderRoute: typeof AuthenticatedReporterProgrammeIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
@@ -560,54 +956,95 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAFaireRoute: typeof AuthenticatedAFaireRoute
   AuthenticatedAdministrationRoute: typeof AuthenticatedAdministrationRoute
   AuthenticatedArchivesRoute: typeof AuthenticatedArchivesRoute
+  AuthenticatedCaisseCorrectionsRoute: typeof AuthenticatedCaisseCorrectionsRoute
+  AuthenticatedCaisseFraternelleRoute: typeof AuthenticatedCaisseFraternelleRoute
   AuthenticatedConflitsRoute: typeof AuthenticatedConflitsRoute
+  AuthenticatedDecouvrirModuleRoute: typeof AuthenticatedDecouvrirModuleRoute
   AuthenticatedDisponibilitesRoute: typeof AuthenticatedDisponibilitesRoute
   AuthenticatedEvaluationsRoute: typeof AuthenticatedEvaluationsRoute
   AuthenticatedExportsRoute: typeof AuthenticatedExportsRoute
+  AuthenticatedFormationsRoute: typeof AuthenticatedFormationsRoute
   AuthenticatedHistoriqueRoute: typeof AuthenticatedHistoriqueRoute
+  AuthenticatedMaterielComRoute: typeof AuthenticatedMaterielComRoute
+  AuthenticatedMaterielMouvementsRoute: typeof AuthenticatedMaterielMouvementsRoute
+  AuthenticatedMesAppareilsRoute: typeof AuthenticatedMesAppareilsRoute
+  AuthenticatedMesDemandesRoute: typeof AuthenticatedMesDemandesRoute
   AuthenticatedMesServicesRoute: typeof AuthenticatedMesServicesRoute
   AuthenticatedModelesRoute: typeof AuthenticatedModelesRoute
   AuthenticatedMonPlanningRoute: typeof AuthenticatedMonPlanningRoute
   AuthenticatedMonProfilRoute: typeof AuthenticatedMonProfilRoute
+  AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
   AuthenticatedParametresRoute: typeof AuthenticatedParametresRoute
+  AuthenticatedParametresFinancesRoute: typeof AuthenticatedParametresFinancesRoute
+  AuthenticatedParametresMaterielRoute: typeof AuthenticatedParametresMaterielRoute
+  AuthenticatedParametresVieEquipeRoute: typeof AuthenticatedParametresVieEquipeRoute
   AuthenticatedPilotageRoute: typeof AuthenticatedPilotageRoute
   AuthenticatedPlanningRoute: typeof AuthenticatedPlanningRoute
   AuthenticatedPolesRoute: typeof AuthenticatedPolesRoute
   AuthenticatedPostServiceRoute: typeof AuthenticatedPostServiceRoute
+  AuthenticatedPreferencesNotificationsRoute: typeof AuthenticatedPreferencesNotificationsRoute
   AuthenticatedProgrammesRoute: typeof AuthenticatedProgrammesRoute
+  AuthenticatedReceptionMaterielRoute: typeof AuthenticatedReceptionMaterielRoute
   AuthenticatedRechercheRoute: typeof AuthenticatedRechercheRoute
   AuthenticatedSollicitationsRoute: typeof AuthenticatedSollicitationsRoute
+  AuthenticatedSuiviMaterielRoute: typeof AuthenticatedSuiviMaterielRoute
   AuthenticatedTableauDeBordRoute: typeof AuthenticatedTableauDeBordRoute
   AuthenticatedTachesRoute: typeof AuthenticatedTachesRoute
   AuthenticatedTrombinoscopeRoute: typeof AuthenticatedTrombinoscopeRoute
+  AuthenticatedVieEquipeRoute: typeof AuthenticatedVieEquipeRoute
+  AuthenticatedDemandeMaterielIdRoute: typeof AuthenticatedDemandeMaterielIdRoute
+  AuthenticatedMembreIdRoute: typeof AuthenticatedMembreIdRoute
+  AuthenticatedPoleIdRoute: typeof AuthenticatedPoleIdRoute
   AuthenticatedProgrammeIdRoute: typeof AuthenticatedProgrammeIdRoute
+  AuthenticatedReporterProgrammeIdRoute: typeof AuthenticatedReporterProgrammeIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAFaireRoute: AuthenticatedAFaireRoute,
   AuthenticatedAdministrationRoute: AuthenticatedAdministrationRoute,
   AuthenticatedArchivesRoute: AuthenticatedArchivesRoute,
+  AuthenticatedCaisseCorrectionsRoute: AuthenticatedCaisseCorrectionsRoute,
+  AuthenticatedCaisseFraternelleRoute: AuthenticatedCaisseFraternelleRoute,
   AuthenticatedConflitsRoute: AuthenticatedConflitsRoute,
+  AuthenticatedDecouvrirModuleRoute: AuthenticatedDecouvrirModuleRoute,
   AuthenticatedDisponibilitesRoute: AuthenticatedDisponibilitesRoute,
   AuthenticatedEvaluationsRoute: AuthenticatedEvaluationsRoute,
   AuthenticatedExportsRoute: AuthenticatedExportsRoute,
+  AuthenticatedFormationsRoute: AuthenticatedFormationsRoute,
   AuthenticatedHistoriqueRoute: AuthenticatedHistoriqueRoute,
+  AuthenticatedMaterielComRoute: AuthenticatedMaterielComRoute,
+  AuthenticatedMaterielMouvementsRoute: AuthenticatedMaterielMouvementsRoute,
+  AuthenticatedMesAppareilsRoute: AuthenticatedMesAppareilsRoute,
+  AuthenticatedMesDemandesRoute: AuthenticatedMesDemandesRoute,
   AuthenticatedMesServicesRoute: AuthenticatedMesServicesRoute,
   AuthenticatedModelesRoute: AuthenticatedModelesRoute,
   AuthenticatedMonPlanningRoute: AuthenticatedMonPlanningRoute,
   AuthenticatedMonProfilRoute: AuthenticatedMonProfilRoute,
+  AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
   AuthenticatedParametresRoute: AuthenticatedParametresRoute,
+  AuthenticatedParametresFinancesRoute: AuthenticatedParametresFinancesRoute,
+  AuthenticatedParametresMaterielRoute: AuthenticatedParametresMaterielRoute,
+  AuthenticatedParametresVieEquipeRoute: AuthenticatedParametresVieEquipeRoute,
   AuthenticatedPilotageRoute: AuthenticatedPilotageRoute,
   AuthenticatedPlanningRoute: AuthenticatedPlanningRoute,
   AuthenticatedPolesRoute: AuthenticatedPolesRoute,
   AuthenticatedPostServiceRoute: AuthenticatedPostServiceRoute,
+  AuthenticatedPreferencesNotificationsRoute:
+    AuthenticatedPreferencesNotificationsRoute,
   AuthenticatedProgrammesRoute: AuthenticatedProgrammesRoute,
+  AuthenticatedReceptionMaterielRoute: AuthenticatedReceptionMaterielRoute,
   AuthenticatedRechercheRoute: AuthenticatedRechercheRoute,
   AuthenticatedSollicitationsRoute: AuthenticatedSollicitationsRoute,
+  AuthenticatedSuiviMaterielRoute: AuthenticatedSuiviMaterielRoute,
   AuthenticatedTableauDeBordRoute: AuthenticatedTableauDeBordRoute,
   AuthenticatedTachesRoute: AuthenticatedTachesRoute,
   AuthenticatedTrombinoscopeRoute: AuthenticatedTrombinoscopeRoute,
+  AuthenticatedVieEquipeRoute: AuthenticatedVieEquipeRoute,
+  AuthenticatedDemandeMaterielIdRoute: AuthenticatedDemandeMaterielIdRoute,
+  AuthenticatedMembreIdRoute: AuthenticatedMembreIdRoute,
+  AuthenticatedPoleIdRoute: AuthenticatedPoleIdRoute,
   AuthenticatedProgrammeIdRoute: AuthenticatedProgrammeIdRoute,
+  AuthenticatedReporterProgrammeIdRoute: AuthenticatedReporterProgrammeIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

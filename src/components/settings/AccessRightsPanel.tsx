@@ -105,7 +105,7 @@ const MODULES: ModuleDef[] = [
   },
   {
     key: "sollicitations",
-    label: "Sollicitations ponctuelles",
+    label: "Demandes ponctuelles",
     description: "Demandes, réponses, modification et suivi des renforts/remplacements.",
     actions: [
       ["consulter", "Consulter"],

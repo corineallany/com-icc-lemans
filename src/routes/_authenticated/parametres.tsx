@@ -446,7 +446,7 @@ function ReadOnlyRights() {
     "Structure / Organisation",
     "Programmes",
     "Planning",
-    "Sollicitations",
+    "Demandes ponctuelles",
     "Indisponibilités",
     "Modèles",
     "Formation",
