@@ -1,0 +1,45 @@
+name: One-shot preserve program participation modes
+on:
+  push:
+    paths:
+      - '.github/workflows/one-shot-preserve-program-participation-modes.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Preserve direct vs solicited modes when editing a program
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/admin/AdminProgrammes.tsx')
+          s=p.read_text()
+          old='''      const old =\n        (programs.data ?? []).find((p) => p.id === id)?.assignments.map((a) => a.id) ?? [];\n      if (old.length)\n        await supabase.from("program_assignment_members").delete().in("assignment_id", old);'''
+          new='''      const oldAssignments =\n        (programs.data ?? []).find((p) => p.id === id)?.assignments ?? [];\n      const old = oldAssignments.map((a) => a.id);\n      const previousParticipation = old.length\n        ? await (supabase as any)\n            .from("program_assignment_members")\n            .select("assignment_id,member_id,assignment_mode,assigned_at,assigned_by,process_status")\n            .in("assignment_id", old)\n        : { data: [], error: null };\n      if (previousParticipation.error) throw previousParticipation.error;\n      const oldPoleByAssignment = new Map(oldAssignments.map((a) => [a.id, a.pole_id]));\n      const previousByPoleMember = new Map(\n        (previousParticipation.data ?? []).map((r: any) => [\n          `${oldPoleByAssignment.get(r.assignment_id)}::${r.member_id}`,\n          r,\n        ]),\n      );\n      if (old.length)\n        await supabase.from("program_assignment_members").delete().in("assignment_id", old);'''
+          if old not in s: raise SystemExit('old participation deletion block not found')
+          s=s.replace(old,new,1)
+
+          old='''      const mr = rows.flatMap((a, i) =>\n        [...new Set([...sel[i][1].memberIds, ...(directByPole.get(a.pole_id) ?? [])])].map(\n          (member_id) => ({ assignment_id: a.id, member_id }),\n        ),\n      );'''
+          new='''      const mr = rows.flatMap((a, i) =>\n        [...new Set([...sel[i][1].memberIds, ...(directByPole.get(a.pole_id) ?? [])])].map(\n          (member_id) => {\n            const previous: any = previousByPoleMember.get(`${a.pole_id}::${member_id}`);\n            const assignment_mode = previous?.assignment_mode ?? "direct";\n            return {\n              assignment_id: a.id,\n              member_id,\n              assignment_mode,\n              process_status: previous?.process_status ?? "active",\n              assigned_at:\n                assignment_mode === "solicited"\n                  ? null\n                  : previous?.assigned_at ?? new Date().toISOString(),\n              assigned_by: assignment_mode === "solicited" ? null : previous?.assigned_by ?? null,\n            };\n          },\n        ),\n      );'''
+          if old not in s: raise SystemExit('member rows block not found')
+          s=s.replace(old,new,1)
+
+          old='''                <p className="mb-3 text-xs text-muted-foreground">\n                  Les membres proposés dans chaque bloc appartiennent à ce pôle. Pour un programme en déplacement, coche « Déplacement » uniquement sur les personnes qui partent ; les autres restent sur place par défaut.\n                </p>'''
+          new='''                <p className="mb-3 text-xs text-muted-foreground">\n                  Les membres proposés dans chaque bloc appartiennent à ce pôle. Une personne cochée ici est affectée directement : aucune réponse ne lui sera demandée. Pour solliciter une personne et attendre sa réponse, enregistre le programme puis utilise le bloc « Solliciter » dans sa fiche. Pour un programme en déplacement, coche « Déplacement » uniquement sur les personnes qui partent ; les autres restent sur place par défaut.\n                </p>'''
+          if old not in s: raise SystemExit('pole helper text not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+          print('Participation mode preservation patched.')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/admin/AdminProgrammes.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: preserve direct and solicited participation modes on program edits'
+          git push origin main
