@@ -1,14 +1,37 @@
-import type { ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 
 import { FinanceCorrectionShortcut } from "@/components/FinanceCorrectionShortcut";
 import { FinanceSettingsShortcut } from "@/components/FinanceSettingsShortcut";
 import { IccHeader } from "@/components/IccHeader";
 
-/**
- * Coquille unique de l'application : en-tête violet ICC, contenu centré,
- * titre de page violet et bouton « ← Retour ».
- * Le retour suit l'historique réel de navigation au lieu de renvoyer systématiquement à l'accueil.
- */
+class HeaderBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error("[icc-header]", error, info);
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <header className="sticky top-0 z-50 bg-icc-violet text-white shadow-lg">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
+          <Link to="/tableau-de-bord" className="flex items-center gap-3 font-black">
+            <span className="rounded-xl bg-icc-yellow px-3 py-2 text-icc-violet">ICC</span>
+            <span>LE MANS</span>
+          </Link>
+          <Link to="/tableau-de-bord" className="rounded-lg border border-white/30 px-3 py-2 text-xs font-bold">
+            Accueil
+          </Link>
+        </div>
+      </header>
+    );
+  }
+}
+
+/** Coquille commune des pages internes. */
 export function AppShell({
   title,
   subtitle,
@@ -31,7 +54,7 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <IccHeader />
+      <HeaderBoundary><IccHeader /></HeaderBoundary>
       <main className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
