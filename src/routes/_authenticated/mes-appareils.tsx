@@ -47,8 +47,12 @@ function MesAppareils() {
   const remove=useMutation({mutationFn:async(row:DeviceRow)=>{const current=row.endpoint===push.currentEndpoint;if(current)await push.disable();const{error}=await db().from("icc_push_subscriptions").delete().eq("id",row.id).eq("user_id",userId);if(error)throw error;if(current){await supabase.auth.signOut();await router.navigate({to:"/auth"})}},onSuccess:()=>qc.invalidateQueries({queryKey:["my-push-devices",userId]})});
   const refresh=()=>qc.invalidateQueries({queryKey:["my-push-devices",userId]});
   const enableCurrent=async()=>{await push.enable();await qc.invalidateQueries({queryKey:["my-push-devices",userId]})};
-  const rows=devices.data??[];
-  const currentRow=rows.find(r=>r.endpoint===push.currentEndpoint);
+  const rawRows=devices.data??[];
+  const deviceKey=(row:DeviceRow)=>{const i=deviceInfo(row.user_agent);return `${i.kind}|${i.brand}|${i.model}|${i.browser}`.toLowerCase()};
+  const grouped=new Map<string,DeviceRow[]>();
+  for(const row of rawRows){const key=deviceKey(row);grouped.set(key,[...(grouped.get(key)??[]),row])}
+  const rows=[...grouped.values()].map(group=>group.find(r=>r.endpoint===push.currentEndpoint)??group.find(r=>r.enabled)??group[0]);
+  const currentRow=rawRows.find(r=>r.endpoint===push.currentEndpoint);
   const currentInfo=deviceInfo(typeof navigator!=="undefined"?navigator.userAgent:null);
   return <AppShell title="Mes appareils / Push" subtitle="Gérez les notifications Push de chaque appareil enregistré">
     <div className="space-y-4">
@@ -60,7 +64,7 @@ function MesAppareils() {
         </CardContent>
       </Card>
 
-      <Card><CardHeader><div className="flex items-center justify-between gap-3"><div><CardTitle className="text-base">Appareils enregistrés</CardTitle><p className="mt-1 text-xs text-muted-foreground">Tous les appareils restent enregistrés jusqu’à leur suppression.</p></div><Button size="sm" variant="outline" onClick={refresh}><RefreshCw className="size-4"/> Actualiser</Button></div></CardHeader>
+      <Card><CardHeader><div className="flex items-center justify-between gap-3"><div><CardTitle className="text-base">Appareils enregistrés</CardTitle><p className="mt-1 text-xs text-muted-foreground">Un même appareil n’est affiché qu’une seule fois, même si son abonnement Push a été renouvelé.</p></div><Button size="sm" variant="outline" onClick={refresh}><RefreshCw className="size-4"/> Actualiser</Button></div></CardHeader>
         <CardContent className="space-y-3">
           {devices.isLoading?<p className="text-sm text-muted-foreground">Chargement des appareils…</p>:devices.isError?<p className="text-sm text-destructive">Impossible de charger vos appareils enregistrés.</p>:rows.length===0?<p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Aucun appareil enregistré pour le moment.</p>:rows.map(row=>{const current=row.endpoint===push.currentEndpoint;const info=deviceInfo(row.user_agent);return <div key={row.id} className="rounded-xl border p-4"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="flex min-w-0 gap-3"><span className="mt-0.5 rounded-lg bg-muted p-2"><DeviceIcon kind={info.kind}/></span><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><b>{info.title}</b>{current?<Badge>Appareil actuel</Badge>:null}<Badge variant={row.enabled?"default":"secondary"}>{row.enabled?"Push actif":"Push désactivé"}</Badge></div><p className="mt-1 text-xs text-muted-foreground">Marque : {info.brand} · Modèle : {info.model} · Navigateur : {info.browser}</p><p className="mt-1 text-xs text-muted-foreground">Enregistré le {formatDate(row.created_at)} · Mis à jour le {formatDate(row.updated_at)}</p></div></div><div className="flex flex-wrap gap-2 sm:justify-end">{row.enabled?<Button size="sm" variant="outline" disabled={toggle.isPending} onClick={()=>toggle.mutate({row,enabled:false})}><BellOff className="size-4"/> Désactiver</Button>:<Button size="sm" variant="outline" disabled={toggle.isPending} onClick={()=>toggle.mutate({row,enabled:true})}><Bell className="size-4"/> Activer</Button>}<Button size="sm" variant="destructive" disabled={remove.isPending} onClick={()=>remove.mutate(row)}><Trash2 className="size-4"/> {current?"Supprimer / me déconnecter":"Supprimer"}</Button></div></div></div>})}
           {toggle.error?<p className="text-xs text-destructive">Impossible de modifier l’état Push de cet appareil.</p>:null}
