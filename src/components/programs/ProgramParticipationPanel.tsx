@@ -65,6 +65,22 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
+  // Single source of truth for staff candidate lists: a member only appears under
+  // a pole if member_poles explicitly links that member to that pole.
+  const programPoleMemberships = useQuery({
+    queryKey: ["program-pole-memberships", programId, assignments.map((a) => a.pole_id).sort().join(",")],
+    enabled: assignments.length > 0,
+    queryFn: async () => {
+      const poleIds = [...new Set(assignments.map((a) => a.pole_id))];
+      const { data, error } = await (supabase as any)
+        .from("member_poles")
+        .select("member_id,pole_id")
+        .in("pole_id", poleIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const modes = useQuery({
     queryKey: ["program-assignment-modes", programId],
     queryFn: async () => {
@@ -85,11 +101,16 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     () => new Map((responses.data ?? []).map((r: any) => [r.member_id, r.status])),
     [responses.data],
   );
+  const membershipKeys = useMemo(
+    () => new Set((programPoleMemberships.data ?? []).map((x: any) => `${x.pole_id}::${x.member_id}`)),
+    [programPoleMemberships.data],
+  );
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["program-proposals", programId] });
     qc.invalidateQueries({ queryKey: ["program-assignment-modes", programId] });
     qc.invalidateQueries({ queryKey: ["program-responses", programId] });
+    qc.invalidateQueries({ queryKey: ["program-pole-memberships", programId] });
     qc.invalidateQueries({ queryKey: ["programs"] });
     qc.invalidateQueries({ queryKey: ["notifications"] });
   };
@@ -126,6 +147,10 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
   const assign = useMutation({
     mutationFn: async ({ aid, mid }: { aid: string; mid: string }) => {
+      const assignment = assignments.find((a) => a.id === aid);
+      if (!assignment || !membershipKeys.has(`${assignment.pole_id}::${mid}`)) {
+        throw new Error("Ce membre n’est pas rattaché à ce pôle. Utilisez une sollicitation pour un renfort d’un autre pôle.");
+      }
       if (responseMap.get(mid) === "unavailable") {
         const ok = window.confirm(
           "Cette personne a refusé cette sollicitation. Confirmer tout de même l’affectation directe ?",
@@ -179,7 +204,12 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         const myPole = !!memberships.data?.has(a.pole_id);
         const confirmedIds = new Set(confirmed.map((x: any) => x.member_id));
         const candidates = members.filter(
-          (m) => m.status === "active" && !m.deleted && !confirmedIds.has(m.id),
+          (m) =>
+            m.status === "active" &&
+            !m.deleted &&
+            !m.archived &&
+            !confirmedIds.has(m.id) &&
+            membershipKeys.has(`${a.pole_id}::${m.id}`),
         );
 
         return (
@@ -266,7 +296,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                   value={direct[a.id] ?? ""}
                   onChange={(e) => setDirect((v) => ({ ...v, [a.id]: e.target.value }))}
                 >
-                  <option value="">Choisir un membre…</option>
+                  <option value="">Choisir un membre du pôle…</option>
                   {candidates.map((m) => (
                     <option key={m.id} value={m.id}>{m.full_name}</option>
                   ))}
@@ -278,6 +308,9 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                 >
                   Affecter sans réponse
                 </Button>
+                {!programPoleMemberships.isLoading && candidates.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">Aucun autre membre actif dans ce pôle.</span>
+                ) : null}
               </div>
             ) : null}
           </div>
