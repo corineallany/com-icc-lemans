@@ -98,6 +98,24 @@ function ProgramSheet() {
     },
   });
   const program = (programs.data ?? []).find((p) => p.id === id);
+  const participationModes = useQuery({
+    queryKey: [
+      "program-sheet-participation-modes",
+      id,
+      (program?.assignments ?? []).map((a) => a.id).sort().join(","),
+    ],
+    enabled: !!program,
+    queryFn: async () => {
+      const assignmentIds = (program?.assignments ?? []).map((a) => a.id);
+      if (!assignmentIds.length) return [];
+      const { data, error } = await (supabase as any)
+        .from("program_assignment_members")
+        .select("id,assignment_id,member_id,assignment_mode,process_status")
+        .in("assignment_id", assignmentIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const poleName = new Map((poles.data ?? []).map((p) => [p.id, p.name]));
   const memberName = new Map((members.data?.members ?? []).map((m) => [m.id, m.full_name]));
   const programTasks = (tasks.data ?? []).filter((t) => t.program_id === id);
@@ -105,6 +123,24 @@ function ProgramSheet() {
   const teamLocation = (mid: string) =>
     ((program as any)?.travel_member_ids ?? []).includes(mid) ? "travel" : "onsite";
   const responseOf = (mid: string) => (responses.data ?? []).find((r: any) => r.member_id === mid);
+  const participationRows = participationModes.data ?? [];
+  const participationModeOf = (mid: string) =>
+    participationRows.find((r: any) => r.member_id === mid && r.process_status !== "covered")?.assignment_mode;
+  const requiresResponse =
+    !!member?.id &&
+    participationRows.some(
+      (r: any) =>
+        r.member_id === member.id &&
+        r.assignment_mode === "solicited" &&
+        r.process_status !== "covered",
+    );
+  const participationLabel = (mid: string) => {
+    const mode = participationModeOf(mid);
+    if (mode === "direct") return "Affecté directement";
+    if (mode === "proposal") return "Proposition acceptée";
+    if (mode === "solicited") return responseLabel(responseOf(mid)?.status);
+    return responseLabel(responseOf(mid)?.status);
+  };
   const conflicts =
     programs.data && availability.data && members.data
       ? detectConflicts(programs.data, members.data.members, availability.data).filter(
@@ -117,19 +153,11 @@ function ProgramSheet() {
     mutationFn: async ({ status, note }: { status: ResponseStatus; note?: string }) => {
       if (!member?.id) throw new Error("Compte non lié à un équipier.");
       const clean = note?.trim() || null;
-      const { error } = await supabase
-        .from("program_member_responses")
-        .upsert(
-          {
-            id: `${id}__${member.id}`,
-            program_id: id,
-            member_id: member.id,
-            status,
-            reserve: status === "partial" ? clean : null,
-            reason: status === "unavailable" ? clean : null,
-          },
-          { onConflict: "program_id,member_id" },
-        );
+      const { error } = await (supabase as any).rpc("respond_to_program_solicitation", {
+        p_program_id: id,
+        p_status: status,
+        p_note: clean,
+      });
       if (error) throw error;
       await logAction({
         action: "reponse_affectation",
@@ -143,6 +171,8 @@ function ProgramSheet() {
       setEditor(null);
       setResponseNote("");
       qc.invalidateQueries({ queryKey: ["program-responses", id] });
+      qc.invalidateQueries({ queryKey: ["program-sheet-participation-modes", id] });
+      qc.invalidateQueries({ queryKey: ["program-assignment-modes", id] });
       qc.invalidateQueries({ queryKey: ["programs"] });
       toast.success("Réponse enregistrée");
     },
@@ -348,7 +378,7 @@ function ProgramSheet() {
     >
       <div>
         <b>{memberName.get(mid) ?? mid}</b>
-        <p className="text-xs text-muted-foreground">{responseLabel(responseOf(mid)?.status)}</p>
+        <p className="text-xs text-muted-foreground">{participationLabel(mid)}</p>
       </div>
       {isStaff ? (
         <div className="flex flex-wrap gap-1">
@@ -443,10 +473,10 @@ function ProgramSheet() {
               ) : null}
             </CardContent>
           </Card>
-          {member?.id && assignedIds.includes(member.id) ? (
+          {requiresResponse ? (
             <Card>
               <CardHeader>
-                <CardTitle>Ma réponse à l'affectation</CardTitle>
+                <CardTitle>Ma réponse à la sollicitation</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex gap-2">
@@ -612,7 +642,7 @@ function ProgramSheet() {
                   <p className="text-sm text-muted-foreground">{a.tasks}</p>
                   {a.memberIds.map((mid) => (
                     <p key={mid} className="text-sm">
-                      {memberName.get(mid) ?? mid} · {responseLabel(responseOf(mid)?.status)}
+                      {memberName.get(mid) ?? mid} · {participationLabel(mid)}
                       {hasTravel
                         ? ` · ${teamLocation(mid) === "travel" ? "En déplacement" : teamLocation(mid) === "onsite" ? "Sur place" : "Répartition à préciser"}`
                         : ""}
