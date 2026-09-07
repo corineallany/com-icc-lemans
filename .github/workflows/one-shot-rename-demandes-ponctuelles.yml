@@ -1,0 +1,72 @@
+name: One-shot rename demandes ponctuelles
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/one-shot-rename-demandes-ponctuelles.yml'
+permissions:
+  contents: write
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Rename user-facing wording only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Keep technical route/table/query identifiers unchanged. Only visible wording changes.
+          general = {
+              'Sollicitations ponctuelles': 'Demandes ponctuelles',
+              'Sollicitations': 'Demandes ponctuelles',
+          }
+          specific = {
+              'Nouvelle sollicitation ponctuelle': 'Nouvelle demande ponctuelle',
+              '+ Nouvelle sollicitation': '+ Nouvelle demande',
+              'Aucune sollicitation': 'Aucune demande ponctuelle',
+              'Modifier la sollicitation': 'Modifier la demande ponctuelle',
+              'Nouvelle sollicitation': 'Nouvelle demande ponctuelle',
+              'Réponse à une sollicitation': 'Réponse à une demande ponctuelle',
+              'Sollicitation modifiée': 'Demande ponctuelle modifiée',
+              'Sollicitation créée et envoyée': 'Demande ponctuelle créée et envoyée',
+              'Sollicitation annulée': 'Demande ponctuelle annulée',
+              'La sollicitation peut attribuer des créneaux précis ou laisser chaque membre': 'La demande ponctuelle peut attribuer des créneaux précis ou laisser chaque membre',
+              'personne(s) sollicitée(s)': 'personne(s) destinataire(s)',
+              '?? "Sollicitation"': '?? "Demande ponctuelle"',
+          }
+
+          for p in Path('src').rglob('*'):
+              if p.suffix not in {'.ts', '.tsx'}:
+                  continue
+              s = p.read_text()
+              old = s
+              for a,b in general.items():
+                  s = s.replace(a,b)
+              if p.as_posix().endswith('src/routes/_authenticated/sollicitations.tsx'):
+                  for a,b in specific.items():
+                      s = s.replace(a,b)
+              if s != old:
+                  p.write_text(s)
+                  print('updated', p)
+          PY
+      - name: Verify legacy visible labels are gone
+        run: |
+          ! grep -RIn --include='*.tsx' --include='*.ts' -E 'Sollicitations ponctuelles|>Sollicitations<|"Sollicitations"|Nouvelle sollicitation ponctuelle|Aucune sollicitation|Modifier la sollicitation|Sollicitation (modifiée|créée et envoyée|annulée)|Réponse à une sollicitation' src
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Commit rename and remove temporary workflow
+        run: |
+          rm .github/workflows/one-shot-rename-demandes-ponctuelles.yml
+          git config user.name "corineallany"
+          git config user.email "corineallany@gmail.com"
+          git add src .github/workflows/one-shot-rename-demandes-ponctuelles.yml
+          git commit -m "ux: rename ponctual solicitations as demandes ponctuelles"
+          git push
