@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
@@ -46,11 +46,12 @@ export function useAuth() {
  * - Responsable / Adjoint selon Paramètres > Direction ;
  * - admin_technique reste un accès transversal et ne remplace pas le rôle hiérarchique.
  *
- * La base synchronise automatiquement user_roles avec member_poles et app_settings.
+ * La synchronisation Realtime est centralisée dans RealtimeQuerySync afin d'éviter
+ * de créer plusieurs canaux identiques lorsque useCurrentRole est utilisé par
+ * plusieurs composants de la même page.
  */
 export function useCurrentRole() {
   const { user, loading } = useAuth();
-  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: ["current-role", user?.id],
@@ -81,19 +82,6 @@ export function useCurrentRole() {
       return { role, roles, permissions, member: memberRes.data ?? null };
     },
   });
-
-  useEffect(() => {
-    if (!user?.id) return;
-    const channel = supabase
-      .channel(`current-role-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "user_roles", filter: `user_id=eq.${user.id}` },
-        () => queryClient.invalidateQueries({ queryKey: ["current-role", user.id] }),
-      )
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [user?.id, queryClient]);
 
   const role = query.data?.role ?? null;
   const roles = query.data?.roles ?? [];
