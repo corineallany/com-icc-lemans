@@ -6,9 +6,14 @@ import { toast } from "sonner";
 import { Field, newId } from "@/components/admin/form-kit";
 import { useCurrentRole } from "@/hooks/useAuth";
 import { RecurrenceFields } from "@/components/programs/RecurrenceFields";
-import { TravelMembers } from "@/components/programs/TravelMembers";
 import { recurrenceDates, type RecurrenceRule } from "@/lib/recurrence";
-import { canonicalProgramFormat, canonicalProgramRecurrence } from "@/lib/programLabels";
+import {
+  canonicalProgramFormat,
+  canonicalProgramRecurrence,
+  PROGRAM_EDITOR_AUDIENCE_OPTIONS,
+  PROGRAM_EDITOR_FORMAT_OPTIONS,
+  PROGRAM_EDITOR_TYPE_OPTIONS,
+} from "@/lib/programLabels";
 import { supabase } from "@/integrations/supabase/client";
 import {
   availabilityQuery,
@@ -47,14 +52,6 @@ const STATUSES = [
   ["postponed", "Reporté"],
   ["cancelled", "Annulé"],
 ];
-const TYPES = ["Église", "Corporate", "Autre église-Invitation", "Interne Com"];
-const FORMATS = [
-  "Présentiel",
-  "En ligne",
-  "Présentiel + En ligne",
-  "Déplacement",
-  "Déplacement + Connecté",
-];
 const IMPORTANCES = [
   ["critical", "Critique"],
   ["important", "Importante"],
@@ -69,11 +66,6 @@ const RECURRENCES = [
   ["mensuel", "Mensuel"],
   ["trimestriel", "Trimestriel"],
   ["annuel", "Annuel"],
-];
-const AUDIENCES = [
-  ["ICC", "ICC"],
-  ["EJP", "EJP"],
-  ["Toute l'église", "Toute l'église"],
 ];
 type PoleDraft = { selected: boolean; tasks: string; memberIds: string[] };
 type Draft = {
@@ -616,13 +608,13 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                   label="Type"
                   value={draft.program_type}
                   set={(v) => setDraft({ ...draft, program_type: v })}
-                  items={TYPES.map((x) => [x, x])}
+                  items={PROGRAM_EDITOR_TYPE_OPTIONS}
                 />
                 <Choice
                   label="Format"
                   value={draft.format}
                   set={(v) => setDraft({ ...draft, format: v })}
-                  items={FORMATS.map((x) => [x, x])}
+                  items={PROGRAM_EDITOR_FORMAT_OPTIONS}
                 />
                 <Choice
                   label="Importance"
@@ -700,7 +692,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                   label="Public / groupe"
                   value={draft.audience || "ICC"}
                   set={(v) => setDraft({ ...draft, audience: v })}
-                  items={AUDIENCES}
+                  items={PROGRAM_EDITOR_AUDIENCE_OPTIONS}
                 />
                 <Field label="Lien / ressource">
                   <Input
@@ -722,13 +714,6 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
               ) : (
                 <p className="text-sm">Cette modification concerne uniquement cette occurrence.</p>
               )}
-              {canonicalProgramFormat(draft.format).startsWith("deplacement") ? (
-                <TravelMembers
-                  members={allMembers.filter((m) => m.status === "active" && !m.archived)}
-                  selected={draft.travel_member_ids}
-                  onChange={(travel_member_ids) => setDraft({ ...draft, travel_member_ids })}
-                />
-              ) : null}
               {(draft.program_type === "Corporate" ||
                 draft.program_type === "Autre église-Invitation") && (
                 <div className="grid gap-3 sm:grid-cols-3">
@@ -746,11 +731,14 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                   onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                 />
               </Field>
-              <Field label="Note générale">
+              <Field label="Consignes générales du programme (tous les pôles)">
                 <Textarea
                   value={draft.general_note}
                   onChange={(e) => setDraft({ ...draft, general_note: e.target.value })}
                 />
+                <span className="block text-[11px] text-muted-foreground">
+                  Informations communes à toute l’équipe. Les missions propres à chaque pôle se renseignent plus bas.
+                </span>
               </Field>
               <ProgramServiceSlotsEditor
                 enabled={draft.detailed_scheduling}
@@ -807,12 +795,16 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
               </section>
               <section>
                 <h3 className="mb-2 font-black text-icc-violet">Pôles et membres mobilisés</h3>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Les membres proposés dans chaque bloc appartiennent à ce pôle. Pour un programme en déplacement, coche « Déplacement » uniquement sur les personnes qui partent ; les autres restent sur place par défaut.
+                </p>
                 <div className="space-y-3">
                   {activePoles.map((pole) => {
                     const x = draft.poles[pole.id] ?? { selected: false, tasks: "", memberIds: [] };
                     const pm = allMembers.filter((m) =>
                       links.some((l) => l.pole_id === pole.id && l.member_id === m.id),
                     );
+                    const travelFormat = canonicalProgramFormat(draft.format).startsWith("deplacement");
                     return (
                       <div key={pole.id} className="rounded-xl border p-3">
                         <label className="flex gap-2 font-bold">
@@ -833,7 +825,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                         {x.selected && (
                           <div className="mt-3 space-y-2">
                             <Input
-                              placeholder="Tâches confiées à ce pôle"
+                              placeholder={`Mission / tâche du pôle ${pole.name}`}
                               value={x.tasks}
                               onChange={(e) =>
                                 setDraft({
@@ -848,42 +840,63 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                             {pm.map((m) => {
                               const inactive = m.status !== "active",
                                 u = unavailable(m.id),
-                                checked = x.memberIds.includes(m.id);
+                                checked = x.memberIds.includes(m.id),
+                                inTravel = draft.travel_member_ids.includes(m.id);
                               return (
-                                <label
+                                <div
                                   key={m.id}
-                                  className="flex items-center justify-between rounded-lg bg-muted/50 p-2 text-sm"
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/50 p-2 text-sm"
                                 >
-                                  <span className="flex gap-2">
+                                  <label className="flex items-center gap-2">
                                     <Checkbox
                                       checked={checked}
                                       disabled={inactive}
-                                      onCheckedChange={(c) =>
+                                      onCheckedChange={(c) => {
+                                        const on = c === true;
+                                        const nextMemberIds = on
+                                          ? [...x.memberIds, m.id]
+                                          : x.memberIds.filter((id) => id !== m.id);
+                                        const selectedElsewhere = Object.entries(draft.poles).some(
+                                          ([pid, pd]) => pid !== pole.id && pd.memberIds.includes(m.id),
+                                        );
                                         setDraft({
                                           ...draft,
+                                          travel_member_ids:
+                                            on || selectedElsewhere
+                                              ? draft.travel_member_ids
+                                              : draft.travel_member_ids.filter((id) => id !== m.id),
                                           poles: {
                                             ...draft.poles,
-                                            [pole.id]: {
-                                              ...x,
-                                              memberIds:
-                                                c === true
-                                                  ? [...x.memberIds, m.id]
-                                                  : x.memberIds.filter((id) => id !== m.id),
-                                            },
+                                            [pole.id]: { ...x, memberIds: nextMemberIds },
                                           },
-                                        })
-                                      }
+                                        });
+                                      }}
                                     />
-                                    {m.full_name}
+                                    <span>{m.full_name}</span>
+                                  </label>
+                                  <span className="flex flex-wrap items-center gap-3">
+                                    <small className={inactive || u ? "font-bold text-red-600" : "text-green-700"}>
+                                      {inactive ? "Inactif" : u ? "Indisponible" : null}
+                                    </small>
+                                    {checked && travelFormat ? (
+                                      <label className="flex items-center gap-1.5 rounded-full border bg-background px-2 py-1 text-xs font-semibold">
+                                        <Checkbox
+                                          checked={inTravel}
+                                          onCheckedChange={(c) =>
+                                            setDraft({
+                                              ...draft,
+                                              travel_member_ids:
+                                                c === true
+                                                  ? [...new Set([...draft.travel_member_ids, m.id])]
+                                                  : draft.travel_member_ids.filter((id) => id !== m.id),
+                                            })
+                                          }
+                                        />
+                                        🚐 Déplacement
+                                      </label>
+                                    ) : null}
                                   </span>
-                                  <small
-                                    className={
-                                      inactive || u ? "font-bold text-red-600" : "text-green-700"
-                                    }
-                                  >
-                                    {inactive ? "Inactif" : u ? "Indisponible" : null}
-                                  </small>
-                                </label>
+                                </div>
                               );
                             })}
                           </div>
@@ -924,7 +937,7 @@ function Choice({
   label: string;
   value: string;
   set: (v: string) => void;
-  items: string[][];
+  items: ReadonlyArray<readonly [string, string]>;
 }) {
   return (
     <Field label={label}>
