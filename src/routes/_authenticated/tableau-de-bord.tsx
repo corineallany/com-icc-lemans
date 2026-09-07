@@ -20,11 +20,14 @@ function readPeriod():DashboardPeriod{
   }
 }
 
-class SafeBlock extends Component<{children:ReactNode},{failed:boolean}>{
+class HeaderSafeBlock extends Component<{children:ReactNode},{failed:boolean}>{
   state={failed:false};
   static getDerivedStateFromError(){return{failed:true};}
-  componentDidCatch(error:unknown,info:ErrorInfo){console.error("Dashboard block failed",error,info);}
-  render(){return this.state.failed?null:this.props.children;}
+  componentDidCatch(error:unknown,info:ErrorInfo){console.error("Header block failed",error,info);}
+  render(){
+    if(!this.state.failed)return this.props.children;
+    return <header className="bg-icc-violet px-4 py-3 text-white shadow-lg"><div className="mx-auto flex max-w-7xl items-center justify-between"><b>ICC LE MANS</b><a href={`${import.meta.env.BASE_URL || "/"}tableau-de-bord`} className="text-xs font-bold underline">Accueil</a></div></header>;
+  }
 }
 
 function Home(){
@@ -36,13 +39,13 @@ function Home(){
     return()=>{window.removeEventListener("storage",sync);window.removeEventListener("icc-dashboard-period-change",sync)};
   },[]);
   return <div className="min-h-screen bg-background text-foreground">
-    <SafeBlock><IccHeader/></SafeBlock>
+    <HeaderSafeBlock><IccHeader/></HeaderSafeBlock>
     <main className="mx-auto max-w-7xl px-4 py-6">
-      <SafeBlock><HomeHero/></SafeBlock>
-      <SafeBlock><HomeMenuGrid/></SafeBlock>
-      <SafeBlock><HomeDashboard period={period}/></SafeBlock>
-      <SafeBlock><OrganizationDashboard period={period}/></SafeBlock>
-      <SafeBlock><TeamLifePanel/></SafeBlock>
+      <HomeHero/>
+      <HomeMenuGrid/>
+      <HomeDashboard period={period}/>
+      <OrganizationDashboard period={period}/>
+      <TeamLifePanel/>
     </main>
   </div>
 }
