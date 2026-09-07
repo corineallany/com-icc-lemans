@@ -7,7 +7,12 @@ import { Archive, ArchiveRestore, Copy, Pencil, Plus, Files } from "lucide-react
 import { toast } from "sonner";
 import { RecurrenceFields } from "@/components/programs/RecurrenceFields";
 import { recurrenceDates, type RecurrenceRule } from "@/lib/recurrence";
-import { PROGRAM_RECURRENCE_OPTIONS } from "@/lib/programLabels";
+import {
+  PROGRAM_EDITOR_AUDIENCE_OPTIONS,
+  PROGRAM_EDITOR_FORMAT_OPTIONS,
+  PROGRAM_EDITOR_TYPE_OPTIONS,
+  PROGRAM_RECURRENCE_OPTIONS,
+} from "@/lib/programLabels";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { Field, newId } from "@/components/admin/form-kit";
 import { useCurrentRole } from "@/hooks/useAuth";
@@ -24,6 +29,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -363,29 +375,19 @@ function Modeles() {
                     </div>
                   </div>
                   {mm.response_deadline_days != null ? (
-                    <p className="text-xs">
-                      <b>Réponse :</b> J-{mm.response_deadline_days}
-                    </p>
+                    <p className="text-xs"><b>Réponse :</b> J-{mm.response_deadline_days}</p>
                   ) : null}
                   {mm.assignment_rules ? (
-                    <p className="text-xs">
-                      <b>Règle d’affectation :</b> {mm.assignment_rules}
-                    </p>
+                    <p className="text-xs"><b>Règle d’affectation :</b> {mm.assignment_rules}</p>
                   ) : null}
                   {arr(m.checklist).length ? (
                     <div>
                       <p className="mb-1 text-xs font-semibold">Tâches générées</p>
                       <ul className="space-y-1 text-xs text-muted-foreground">
-                        {arr(m.checklist)
-                          .slice(0, 6)
-                          .map((x) => (
-                            <li key={x}>□ {x}</li>
-                          ))}
+                        {arr(m.checklist).slice(0, 6).map((x) => <li key={x}>□ {x}</li>)}
                       </ul>
                       {arr(m.checklist).length > 6 ? (
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          + {arr(m.checklist).length - 6} autre(s)
-                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">+ {arr(m.checklist).length - 6} autre(s)</p>
                       ) : null}
                     </div>
                   ) : null}
@@ -394,31 +396,18 @@ function Modeles() {
                       <Button
                         size="sm"
                         disabled={instantiate.isPending || m.archived}
-                        onClick={() =>
-                          setGeneration({
-                            model: m,
-                            start: mm.schedule?.start ?? "",
-                            until: mm.schedule?.until ?? "",
-                          })
-                        }
+                        onClick={() => setGeneration({ model: m, start: mm.schedule?.start ?? "", until: mm.schedule?.until ?? "" })}
                       >
-                        <Copy className="mr-1 size-4" />
-                        Ajouter au planning
+                        <Copy className="mr-1 size-4" /> Ajouter au planning
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => duplicate.mutate(m)}>
-                        <Files className="mr-1 size-4" />
-                        Dupliquer
+                        <Files className="mr-1 size-4" /> Dupliquer
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => setDraft(editDraft(m))}>
-                        <Pencil className="mr-1 size-4" />
-                        Modifier
+                        <Pencil className="mr-1 size-4" /> Modifier
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => toggle.mutate(m)}>
-                        {m.archived ? (
-                          <ArchiveRestore className="mr-1 size-4" />
-                        ) : (
-                          <Archive className="mr-1 size-4" />
-                        )}
+                        {m.archived ? <ArchiveRestore className="mr-1 size-4" /> : <Archive className="mr-1 size-4" />}
                         {m.archived ? "Restaurer" : "Archiver"}
                       </Button>
                     </div>
@@ -430,73 +419,38 @@ function Modeles() {
         </div>
       )}
 
-      <Dialog
-        open={!!generation}
-        onOpenChange={(o) => {
-          if (!o) setGeneration(null);
-        }}
-      >
+      <Dialog open={!!generation} onOpenChange={(o) => { if (!o) setGeneration(null); }}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Ajouter au planning</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Ajouter au planning</DialogTitle></DialogHeader>
           {generation ? (
             <div className="space-y-3">
               <p>{generation.model.name}</p>
               <Field label="Première date">
-                <Input
-                  type="date"
-                  value={generation.start}
-                  onChange={(e) => setGeneration({ ...generation, start: e.target.value })}
-                />
+                <Input type="date" value={generation.start} onChange={(e) => setGeneration({ ...generation, start: e.target.value })} />
               </Field>
               {((generation.model as any).schedule?.frequency ?? "ponctuel") !== "ponctuel" ? (
                 <Field label="Répéter jusqu’au">
-                  <Input
-                    type="date"
-                    min={generation.start}
-                    value={generation.until}
-                    onChange={(e) => setGeneration({ ...generation, until: e.target.value })}
-                  />
+                  <Input type="date" min={generation.start} value={generation.until} onChange={(e) => setGeneration({ ...generation, until: e.target.value })} />
                 </Field>
               ) : null}
               <p className="text-sm">Chaque programme pourra être adapté individuellement.</p>
             </div>
           ) : null}
-          <DialogFooter>
-            <Button disabled={instantiate.isPending} onClick={() => instantiate.mutate()}>
-              Ajouter au planning
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button disabled={instantiate.isPending} onClick={() => instantiate.mutate()}>Ajouter au planning</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog
-        open={!!draft}
-        onOpenChange={(o) => {
-          if (!o) setDraft(null);
-        }}
-      >
+
+      <Dialog open={!!draft} onOpenChange={(o) => { if (!o) setDraft(null); }}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{draft?.id ? "Modifier le modèle" : "Nouveau modèle"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{draft?.id ? "Modifier le modèle" : "Nouveau modèle"}</DialogTitle></DialogHeader>
           {draft ? (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Nom du modèle">
-                  <Input
-                    value={draft.name}
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  />
+                  <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
                 </Field>
                 <Field label="Réponse attendue (jours avant)">
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="Ex. 3"
-                    value={draft.response_deadline_days}
-                    onChange={(e) => setDraft({ ...draft, response_deadline_days: e.target.value })}
-                  />
+                  <Input type="number" min="0" placeholder="Ex. 3" value={draft.response_deadline_days} onChange={(e) => setDraft({ ...draft, response_deadline_days: e.target.value })} />
                 </Field>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -504,52 +458,19 @@ function Modeles() {
                   <select
                     className="h-10 w-full rounded-md border bg-background px-3"
                     value={draft.schedule.frequency}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        schedule: { ...draft.schedule, frequency: e.target.value },
-                      })
-                    }
+                    onChange={(e) => setDraft({ ...draft, schedule: { ...draft.schedule, frequency: e.target.value } })}
                   >
-                    {PROGRAM_RECURRENCE_OPTIONS.map(([v, l]) => (
-                      <option key={v} value={v}>
-                        {l}
-                      </option>
-                    ))}
+                    {PROGRAM_RECURRENCE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </Field>
                 <Field label="Première date">
-                  <Input
-                    type="date"
-                    value={draft.schedule.start}
-                    onChange={(e) =>
-                      setDraft({ ...draft, schedule: { ...draft.schedule, start: e.target.value } })
-                    }
-                  />
+                  <Input type="date" value={draft.schedule.start} onChange={(e) => setDraft({ ...draft, schedule: { ...draft.schedule, start: e.target.value } })} />
                 </Field>
                 <Field label="Heure de début">
-                  <Input
-                    type="time"
-                    value={draft.schedule.start_time}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        schedule: { ...draft.schedule, start_time: e.target.value },
-                      })
-                    }
-                  />
+                  <Input type="time" value={draft.schedule.start_time} onChange={(e) => setDraft({ ...draft, schedule: { ...draft.schedule, start_time: e.target.value } })} />
                 </Field>
                 <Field label="Heure de fin">
-                  <Input
-                    type="time"
-                    value={draft.schedule.end_time}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        schedule: { ...draft.schedule, end_time: e.target.value },
-                      })
-                    }
-                  />
+                  <Input type="time" value={draft.schedule.end_time} onChange={(e) => setDraft({ ...draft, schedule: { ...draft.schedule, end_time: e.target.value } })} />
                 </Field>
               </div>
               <RecurrenceFields
@@ -557,86 +478,63 @@ function Modeles() {
                 start={draft.schedule.start}
                 until={draft.schedule.until}
                 rule={draft.schedule.rule}
-                onChange={(until, rule) =>
-                  setDraft({ ...draft, schedule: { ...draft.schedule, until, rule } })
-                }
+                onChange={(until, rule) => setDraft({ ...draft, schedule: { ...draft.schedule, until, rule } })}
               />
               <Field label="Description">
-                <Textarea
-                  value={draft.description}
-                  onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                />
+                <Textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
               </Field>
+
               <div className="grid gap-2 sm:grid-cols-3">
                 <Field label="Type">
-                  <Input
-                    value={draft.program_type}
-                    onChange={(e) => setDraft({ ...draft, program_type: e.target.value })}
-                  />
+                  <Select value={draft.program_type || "__none"} onValueChange={(v) => setDraft({ ...draft, program_type: v === "__none" ? "" : v })}>
+                    <SelectTrigger><SelectValue placeholder="Non renseigné" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">Non renseigné</SelectItem>
+                      {PROGRAM_EDITOR_TYPE_OPTIONS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field label="Format">
-                  <Input
-                    value={draft.format}
-                    onChange={(e) => setDraft({ ...draft, format: e.target.value })}
-                  />
+                  <Select value={draft.format || "__none"} onValueChange={(v) => setDraft({ ...draft, format: v === "__none" ? "" : v })}>
+                    <SelectTrigger><SelectValue placeholder="Non renseigné" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">Non renseigné</SelectItem>
+                      {PROGRAM_EDITOR_FORMAT_OPTIONS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </Field>
                 <Field label="Public">
-                  <Input
-                    value={draft.audience}
-                    onChange={(e) => setDraft({ ...draft, audience: e.target.value })}
-                  />
+                  <Select value={draft.audience || "__none"} onValueChange={(v) => setDraft({ ...draft, audience: v === "__none" ? "" : v })}>
+                    <SelectTrigger><SelectValue placeholder="Non renseigné" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none">Non renseigné</SelectItem>
+                      {PROGRAM_EDITOR_AUDIENCE_OPTIONS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </Field>
               </div>
-              <Field label="Note / consignes générales">
-                <Textarea
-                  value={draft.tasks}
-                  onChange={(e) => setDraft({ ...draft, tasks: e.target.value })}
-                />
+              <p className="-mt-2 text-xs text-muted-foreground">Ces trois listes utilisent exactement les mêmes valeurs que la fiche Programme.</p>
+
+              <Field label="Consignes générales du programme (tous les pôles)">
+                <Textarea value={draft.tasks} onChange={(e) => setDraft({ ...draft, tasks: e.target.value })} />
               </Field>
               <Field label="Pôles mobilisés et besoin humain">
                 <div className="space-y-2">
                   {activePoles.map((p) => {
                     const on = draft.poles.includes(p.id);
                     return (
-                      <div
-                        key={p.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border p-2"
-                      >
+                      <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg border p-2">
                         <button
                           type="button"
-                          onClick={() =>
-                            setDraft({
-                              ...draft,
-                              poles: on
-                                ? draft.poles.filter((x) => x !== p.id)
-                                : [...draft.poles, p.id],
-                            })
-                          }
-                          className={
-                            on
-                              ? "rounded-full bg-icc-violet px-3 py-1 text-xs font-bold text-white"
-                              : "rounded-full border px-3 py-1 text-xs"
-                          }
+                          onClick={() => setDraft({ ...draft, poles: on ? draft.poles.filter((x) => x !== p.id) : [...draft.poles, p.id] })}
+                          className={on ? "rounded-full bg-icc-violet px-3 py-1 text-xs font-bold text-white" : "rounded-full border px-3 py-1 text-xs"}
                         >
                           {p.name}
                         </button>
                         {on ? (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              Personnes nécessaires
-                            </span>
-                            <Input
-                              className="w-20"
-                              type="number"
-                              min="0"
-                              value={draft.staffing[p.id] ?? 0}
-                              onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  staffing: { ...draft.staffing, [p.id]: Number(e.target.value) },
-                                })
-                              }
-                            />
+                            <span className="text-xs text-muted-foreground">Personnes nécessaires</span>
+                            <Input className="w-20" type="number" min="0" value={draft.staffing[p.id] ?? 0} onChange={(e) => setDraft({ ...draft, staffing: { ...draft.staffing, [p.id]: Number(e.target.value) } })} />
                           </div>
                         ) : null}
                       </div>
@@ -645,22 +543,12 @@ function Modeles() {
                 </div>
               </Field>
               <Field label="Règles d’affectation">
-                <Textarea
-                  rows={2}
-                  placeholder="Ex. au moins 1 référent Photo ; 1 autonome + 1 personne en formation"
-                  value={draft.assignment_rules}
-                  onChange={(e) => setDraft({ ...draft, assignment_rules: e.target.value })}
-                />
+                <Textarea rows={2} placeholder="Ex. au moins 1 référent Photo ; 1 autonome + 1 personne en formation" value={draft.assignment_rules} onChange={(e) => setDraft({ ...draft, assignment_rules: e.target.value })} />
               </Field>
-              <Field label="Tâches modèles enrichies">
-                <Textarea
-                  rows={7}
-                  value={draft.checklist}
-                  onChange={(e) => setDraft({ ...draft, checklist: e.target.value })}
-                />
+              <Field label="Tâches modèles enrichies par pôle">
+                <Textarea rows={7} value={draft.checklist} onChange={(e) => setDraft({ ...draft, checklist: e.target.value })} />
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Une ligne par tâche. Format optionnel : <b>Titre | Pôle | priorité | J-2</b>.
-                  Exemple : “Préparer les visuels | Stories | haute | J-2”.
+                  Une ligne par tâche. Format optionnel : <b>Titre | Pôle | priorité | J-2</b>. Exemple : “Préparer les visuels | Stories | haute | J-2”.
                 </p>
               </Field>
               <Field label="Notifications par défaut">
@@ -675,19 +563,8 @@ function Modeles() {
                       <button
                         key={x.k}
                         type="button"
-                        onClick={() =>
-                          setDraft({
-                            ...draft,
-                            notification_rules: on
-                              ? draft.notification_rules.filter((v) => v !== x.k)
-                              : [...draft.notification_rules, x.k],
-                          })
-                        }
-                        className={
-                          on
-                            ? "rounded-full bg-icc-violet px-3 py-1 text-xs font-bold text-white"
-                            : "rounded-full border px-3 py-1 text-xs"
-                        }
+                        onClick={() => setDraft({ ...draft, notification_rules: on ? draft.notification_rules.filter((v) => v !== x.k) : [...draft.notification_rules, x.k] })}
+                        className={on ? "rounded-full bg-icc-violet px-3 py-1 text-xs font-bold text-white" : "rounded-full border px-3 py-1 text-xs"}
                       >
                         {x.l}
                       </button>
@@ -696,18 +573,13 @@ function Modeles() {
                 </div>
               </Field>
               <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                Les modifications du modèle ne changent jamais rétroactivement les programmes déjà
-                créés. Elles s’appliquent uniquement aux prochains programmes.
+                Les modifications du modèle ne changent jamais rétroactivement les programmes déjà créés. Elles s’appliquent uniquement aux prochains programmes.
               </p>
             </div>
           ) : null}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDraft(null)}>
-              Annuler
-            </Button>
-            <Button disabled={save.isPending} onClick={() => draft && save.mutate(draft)}>
-              Enregistrer
-            </Button>
+            <Button variant="ghost" onClick={() => setDraft(null)}>Annuler</Button>
+            <Button disabled={save.isPending} onClick={() => draft && save.mutate(draft)}>Enregistrer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
