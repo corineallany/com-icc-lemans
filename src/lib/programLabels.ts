@@ -13,6 +13,22 @@ export const PROGRAM_FORMAT_OPTIONS = [
   ["deplacement_connecte", "Déplacement + Connecté"],
 ] as const;
 
+export const PROGRAM_AUDIENCE_OPTIONS = [
+  ["ICC", "ICC"],
+  ["EJP", "EJP"],
+  ["Toute l'église", "Toute l'église"],
+] as const;
+
+/**
+ * Options used by the Program editor and Program Models.
+ * Values deliberately remain the historical labels stored by the editor so
+ * existing programs keep the same data shape while both screens share one
+ * source of truth.
+ */
+export const PROGRAM_EDITOR_TYPE_OPTIONS = PROGRAM_TYPE_OPTIONS.map(([, label]) => [label, label] as const);
+export const PROGRAM_EDITOR_FORMAT_OPTIONS = PROGRAM_FORMAT_OPTIONS.map(([, label]) => [label, label] as const);
+export const PROGRAM_EDITOR_AUDIENCE_OPTIONS = PROGRAM_AUDIENCE_OPTIONS;
+
 export const PROGRAM_RECURRENCE_OPTIONS = [
   ["ponctuel", "Ponctuel"],
   ["hebdo", "Hebdomadaire"],
