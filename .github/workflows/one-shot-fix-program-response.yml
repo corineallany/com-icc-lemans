@@ -1,0 +1,74 @@
+name: One-shot fix program solicitation response
+on:
+  push:
+    paths:
+      - '.github/workflows/one-shot-fix-program-response.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch programme response semantics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/routes/_authenticated/programme.$id.tsx')
+          s = p.read_text()
+
+          old = '''  const program = (programs.data ?? []).find((p) => p.id === id);\n  const poleName = new Map((poles.data ?? []).map((p) => [p.id, p.name]));'''
+          new = '''  const program = (programs.data ?? []).find((p) => p.id === id);\n  const participationModes = useQuery({\n    queryKey: [\n      "program-sheet-participation-modes",\n      id,\n      (program?.assignments ?? []).map((a) => a.id).sort().join(","),\n    ],\n    enabled: !!program,\n    queryFn: async () => {\n      const assignmentIds = (program?.assignments ?? []).map((a) => a.id);\n      if (!assignmentIds.length) return [];\n      const { data, error } = await (supabase as any)\n        .from("program_assignment_members")\n        .select("id,assignment_id,member_id,assignment_mode,process_status")\n        .in("assignment_id", assignmentIds);\n      if (error) throw error;\n      return data ?? [];\n    },\n  });\n  const poleName = new Map((poles.data ?? []).map((p) => [p.id, p.name]));'''
+          if old not in s:
+              raise SystemExit('Could not locate program declaration block')
+          s = s.replace(old, new, 1)
+
+          old = '''  const responseOf = (mid: string) => (responses.data ?? []).find((r: any) => r.member_id === mid);\n  const conflicts ='''
+          new = '''  const responseOf = (mid: string) => (responses.data ?? []).find((r: any) => r.member_id === mid);\n  const participationRows = participationModes.data ?? [];\n  const participationModeOf = (mid: string) =>\n    participationRows.find((r: any) => r.member_id === mid && r.process_status !== "covered")?.assignment_mode;\n  const requiresResponse =\n    !!member?.id &&\n    participationRows.some(\n      (r: any) =>\n        r.member_id === member.id &&\n        r.assignment_mode === "solicited" &&\n        r.process_status !== "covered",\n    );\n  const participationLabel = (mid: string) => {\n    const mode = participationModeOf(mid);\n    if (mode === "direct") return "Affecté directement";\n    if (mode === "proposal") return "Proposition acceptée";\n    if (mode === "solicited") return responseLabel(responseOf(mid)?.status);\n    return responseLabel(responseOf(mid)?.status);\n  };\n  const conflicts ='''
+          if old not in s:
+              raise SystemExit('Could not locate response helper block')
+          s = s.replace(old, new, 1)
+
+          old = '''      const clean = note?.trim() || null;\n      const { error } = await supabase\n        .from("program_member_responses")\n        .upsert(\n          {\n            id: `${id}__${member.id}`,\n            program_id: id,\n            member_id: member.id,\n            status,\n            reserve: status === "partial" ? clean : null,\n            reason: status === "unavailable" ? clean : null,\n          },\n          { onConflict: "program_id,member_id" },\n        );\n      if (error) throw error;'''
+          new = '''      const clean = note?.trim() || null;\n      const { error } = await (supabase as any).rpc("respond_to_program_solicitation", {\n        p_program_id: id,\n        p_status: status,\n        p_note: clean,\n      });\n      if (error) throw error;'''
+          if old not in s:
+              raise SystemExit('Could not locate response mutation block')
+          s = s.replace(old, new, 1)
+
+          old = '''      qc.invalidateQueries({ queryKey: ["program-responses", id] });\n      qc.invalidateQueries({ queryKey: ["programs"] });'''
+          new = '''      qc.invalidateQueries({ queryKey: ["program-responses", id] });\n      qc.invalidateQueries({ queryKey: ["program-sheet-participation-modes", id] });\n      qc.invalidateQueries({ queryKey: ["program-assignment-modes", id] });\n      qc.invalidateQueries({ queryKey: ["programs"] });'''
+          if old not in s:
+              raise SystemExit('Could not locate response invalidation block')
+          s = s.replace(old, new, 1)
+
+          s = s.replace(
+              '<p className="text-xs text-muted-foreground">{responseLabel(responseOf(mid)?.status)}</p>',
+              '<p className="text-xs text-muted-foreground">{participationLabel(mid)}</p>',
+              1,
+          )
+
+          old = '''          {member?.id && assignedIds.includes(member.id) ? (\n            <Card>\n              <CardHeader>\n                <CardTitle>Ma réponse à l'affectation</CardTitle>'''
+          new = '''          {requiresResponse ? (\n            <Card>\n              <CardHeader>\n                <CardTitle>Ma réponse à la sollicitation</CardTitle>'''
+          if old not in s:
+              raise SystemExit('Could not locate old response card condition')
+          s = s.replace(old, new, 1)
+
+          s = s.replace(
+              '{memberName.get(mid) ?? mid} · {responseLabel(responseOf(mid)?.status)}',
+              '{memberName.get(mid) ?? mid} · {participationLabel(mid)}',
+              1,
+          )
+
+          p.write_text(s)
+          print('Program response semantics patched.')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'src/routes/_authenticated/programme.$id.tsx'
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: only solicitations can request a program response'
+          git push origin main
