@@ -881,7 +881,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                       inactive || u ? "font-bold text-red-600" : "text-green-700"
                                     }
                                   >
-                                    {inactive ? "Inactif" : u ? "Indisponible" : "Disponible"}
+                                    {inactive ? "Inactif" : u ? "Indisponible" : null}
                                   </small>
                                 </label>
                               );

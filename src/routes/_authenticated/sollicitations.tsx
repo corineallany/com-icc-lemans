@@ -275,7 +275,7 @@ function Sollicitations() {
   function availabilityState(memberId: string, programId?: string | null) {
     const p = allActivePrograms.find((x: any) => x.id === programId);
     const w = programWindow(p);
-    if (!w) return { level: "unknown", label: "Disponibilité inconnue" };
+    if (!w) return { level: "ok", label: "" };
     const blocked = (availability.data ?? []).some(
       (a: any) =>
         a.member_id === memberId &&
@@ -296,7 +296,7 @@ function Sollicitations() {
     if (other) return { level: "warning", label: `Conflit avec ${other.title}` };
     if (p.assignments?.some((a: any) => a.memberIds.includes(memberId)))
       return { level: "info", label: "Déjà affecté à ce programme" };
-    return { level: "ok", label: "Mobilisable · aucun conflit connu" };
+    return { level: "ok", label: "" };
   }
   function resolveTargetMembers(t: TargetDraft) {
     if (t.type === "all") return activeMembers.map((m: any) => m.id);
