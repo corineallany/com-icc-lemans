@@ -232,13 +232,9 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       start_time: s.start_time ?? "",
       end_time: s.end_time ?? "",
       required_count: s.required_count ?? 1,
-      pole_id: s.assignment_id ? (assignmentMap.get(s.assignment_id) ?? "") : "",
-      memberIds: (memberSlots.data ?? [])
-        .filter((m: any) => m.service_slot_id === s.id)
-        .map(
-          (m: any) => memberRows.data.find((a: any) => a.id === m.assignment_member_id)?.member_id,
-        )
-        .filter(Boolean),
+      // Legacy pole/member fields are intentionally no longer edited inside a slot.
+      pole_id: "",
+      memberIds: [],
     }));
     for (const memberSlot of (memberSlots.data ?? []) as any[]) {
       const memberAssignment = (memberRows.data ?? []).find((row: any) => row.id === memberSlot.assignment_member_id);
