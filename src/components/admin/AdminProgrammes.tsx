@@ -67,7 +67,7 @@ const RECURRENCES = [
   ["trimestriel", "Trimestriel"],
   ["annuel", "Annuel"],
 ];
-type PoleDraft = { selected: boolean; tasks: string; memberIds: string[]; requiredBySlot: Record<string, number | ""> };
+type PoleDraft = { selected: boolean; tasks: string; memberIds: string[]; requiredBySlot: Record<string, number | "">; memberModes: Record<string, "direct" | "solicited">; memberSlotIds: Record<string, string[]> };
 type Draft = {
   id: string | null;
   creation_key: string;
@@ -180,7 +180,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
   async function edit(p: ProgramWithDetails) {
     const map: Record<string, PoleDraft> = {};
     p.assignments.forEach(
-      (a) => (map[a.pole_id] = { selected: true, tasks: a.tasks ?? "", memberIds: a.memberIds, requiredBySlot: {} }),
+      (a) => (map[a.pole_id] = { selected: true, tasks: a.tasks ?? "", memberIds: a.memberIds, requiredBySlot: {}, memberModes: {}, memberSlotIds: {} }),
     );
     setPendingFiles([]);
     const t = supabase as any;
@@ -197,7 +197,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
     const memberRows = p.assignments.length
       ? await t
           .from("program_assignment_members")
-          .select("id,member_id")
+          .select("id,assignment_id,member_id,assignment_mode")
           .in(
             "assignment_id",
             p.assignments.map((a) => a.id),
@@ -240,13 +240,34 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         )
         .filter(Boolean),
     }));
+    for (const memberSlot of (memberSlots.data ?? []) as any[]) {
+      const memberAssignment = (memberRows.data ?? []).find((row: any) => row.id === memberSlot.assignment_member_id);
+      const poleId = memberAssignment ? assignmentMap.get(memberAssignment.assignment_id) : null;
+      const slot = serviceSlots.find((item) => item.key === memberSlot.service_slot_id);
+      if (poleId && memberAssignment && slot) {
+        const existing = map[poleId] ?? { selected: true, tasks: "", memberIds: [], requiredBySlot: {}, memberModes: {}, memberSlotIds: {} };
+        const priorSlots = existing.memberSlotIds?.[memberAssignment.member_id] ?? [];
+        map[poleId] = {
+          ...existing,
+          memberIds: [...new Set([...existing.memberIds, memberAssignment.member_id])],
+          memberModes: {
+            ...(existing.memberModes ?? {}),
+            [memberAssignment.member_id]: memberAssignment.assignment_mode === "solicited" ? "solicited" : "direct",
+          },
+          memberSlotIds: {
+            ...(existing.memberSlotIds ?? {}),
+            [memberAssignment.member_id]: [...new Set([...priorSlots, slot.key])],
+          },
+        };
+      }
+    }
     for (const need of (needRes.data ?? []) as any[]) {
       const poleId = assignmentMap.get(
         p.assignments.find((a: any) => a.id === need.assignment_id)?.id ?? "",
       );
       const slot = serviceSlots.find((s) => s.key === need.service_slot_id);
       if (poleId && slot) {
-        const existing = map[poleId] ?? { selected: true, tasks: "", memberIds: [], requiredBySlot: {} };
+        const existing = map[poleId] ?? { selected: true, tasks: "", memberIds: [], requiredBySlot: {}, memberModes: {}, memberSlotIds: {} };
         map[poleId] = {
           ...existing,
           requiredBySlot: { ...(existing.requiredBySlot ?? {}), [slot.key]: Number(need.required_count) },
@@ -422,7 +443,10 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           }
         }
       const mr = rows.flatMap((a, i) =>
-        [...new Set([...sel[i][1].memberIds, ...(directByPole.get(a.pole_id) ?? [])])].map(
+        [...new Set([
+          ...sel[i][1].memberIds.filter((memberId) => (sel[i][1].memberModes?.[memberId] ?? "direct") === "direct"),
+          ...(directByPole.get(a.pole_id) ?? []),
+        ])].map(
           (member_id) => {
             const previous: any = previousByPoleMember.get(`${a.pole_id}::${member_id}`);
             const assignment_mode = previous?.assignment_mode ?? "direct";
@@ -449,6 +473,30 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         if (x.error) throw new Error(x.error.message);
         savedMembers = x.data ?? [];
       }
+      // Send solicitations through the same server workflow used in the programme sheet,
+      // rather than merely setting a display flag on an assignment row.
+      for (const assignment of rows) {
+        const poleDraft = selectedPoles[assignment.pole_id];
+        for (const memberId of poleDraft.memberIds) {
+          if ((poleDraft.memberModes?.[memberId] ?? "direct") !== "solicited") continue;
+          const { error } = await (supabase as any).rpc("solicit_program_member", {
+            p_assignment_id: assignment.id,
+            p_member_id: memberId,
+          });
+          if (error) throw error;
+        }
+      }
+
+      // Reload member rows so both direct assignments and newly created solicitations
+      // can be linked to the precise service slots selected in the pole block.
+      const savedAssignmentIds = rows.map((row) => row.id);
+      savedMembers = savedAssignmentIds.length
+        ? ((await (supabase as any)
+            .from("program_assignment_members")
+            .select("id,assignment_id,member_id")
+            .in("assignment_id", savedAssignmentIds)).data ?? [])
+        : [];
+
       const db = supabase as any;
       await db.from("program_service_slots").delete().eq("program_id", id);
       await db.from("program_days").delete().eq("program_id", id);
@@ -505,31 +553,29 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           if (needsInsert.error) throw needsInsert.error;
         }
 
-        const memberSlots = v.serviceSlots.flatMap((s, slotIndex) =>
-          s.memberIds
-            .map((memberId) => {
-              const assignment = rows.find(
-                (r) =>
-                  r.pole_id ===
-                  (s.pole_id || links.find((l: any) => l.member_id === memberId)?.pole_id),
-              );
+        const memberSlots = rows.flatMap((assignment) => {
+          const poleDraft = selectedPoles[assignment.pole_id];
+          return v.serviceSlots.flatMap((slot, slotIndex) => {
+            const savedSlot = (slotIns.data ?? []).find((saved: any) => saved.position === slotIndex);
+            if (!savedSlot) return [];
+            return poleDraft.memberIds.flatMap((memberId) => {
+              const selectedSlots = poleDraft.memberSlotIds?.[memberId] ?? [];
+              if (!selectedSlots.includes(slot.key)) return [];
               const am = savedMembers.find(
-                (m) => m.assignment_id === assignment?.id && m.member_id === memberId,
+                (m: any) => m.assignment_id === assignment.id && m.member_id === memberId,
               );
               return am
-                ? {
+                ? [{
                     assignment_member_id: am.id,
-                    program_day_id: dayByDate.get(s.service_date),
-                    service_slot_id: (slotIns.data ?? []).find(
-                      (saved: any) => saved.position === slotIndex,
-                    )?.id,
-                    start_time: s.start_time,
-                    end_time: s.end_time,
-                  }
-                : null;
-            })
-            .filter(Boolean),
-        );
+                    program_day_id: dayByDate.get(slot.service_date),
+                    service_slot_id: savedSlot.id,
+                    start_time: slot.start_time,
+                    end_time: slot.end_time,
+                  }]
+                : [];
+            });
+          });
+        });
         if (memberSlots.length) {
           const x = await db.from("program_assignment_member_slots").insert(memberSlots);
           if (x.error) throw x.error;
@@ -827,7 +873,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                 </p>
                 <div className="space-y-3">
                   {activePoles.map((pole) => {
-                    const x = draft.poles[pole.id] ?? { selected: false, tasks: "", memberIds: [], requiredBySlot: {} };
+                    const x = draft.poles[pole.id] ?? { selected: false, tasks: "", memberIds: [], requiredBySlot: {}, memberModes: {}, memberSlotIds: {} };
                     const pm = allMembers.filter((m) =>
                       links.some((l) => l.pole_id === pole.id && l.member_id === m.id),
                     );
@@ -931,6 +977,12 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                         const nextMemberIds = on
                                           ? [...x.memberIds, m.id]
                                           : x.memberIds.filter((id) => id !== m.id);
+                                        const nextMemberModes = { ...(x.memberModes ?? {}) };
+                                        if (on) nextMemberModes[m.id] = nextMemberModes[m.id] ?? "direct";
+                                        else delete nextMemberModes[m.id];
+                                        const nextMemberSlotIds = { ...(x.memberSlotIds ?? {}) };
+                                        if (on) nextMemberSlotIds[m.id] = nextMemberSlotIds[m.id] ?? draft.serviceSlots.map((slot) => slot.key);
+                                        else delete nextMemberSlotIds[m.id];
                                         const selectedElsewhere = Object.entries(draft.poles).some(
                                           ([pid, pd]) => pid !== pole.id && pd.memberIds.includes(m.id),
                                         );
@@ -942,13 +994,76 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                               : draft.travel_member_ids.filter((id) => id !== m.id),
                                           poles: {
                                             ...draft.poles,
-                                            [pole.id]: { ...x, memberIds: nextMemberIds },
+                                            [pole.id]: { ...x, memberIds: nextMemberIds, memberModes: nextMemberModes, memberSlotIds: nextMemberSlotIds },
                                           },
                                         });
                                       }}
                                     />
                                     <span>{m.full_name}</span>
                                   </label>
+                                  {checked ? (
+                                    <div className="w-full space-y-2 pl-7">
+                                      <div className="flex flex-wrap gap-2">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={(x.memberModes?.[m.id] ?? "direct") === "solicited" ? "default" : "outline"}
+                                          onClick={() => setDraft({
+                                            ...draft,
+                                            poles: {
+                                              ...draft.poles,
+                                              [pole.id]: { ...x, memberModes: { ...(x.memberModes ?? {}), [m.id]: "solicited" } },
+                                            },
+                                          })}
+                                        >
+                                          Solliciter
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant={(x.memberModes?.[m.id] ?? "direct") === "direct" ? "default" : "outline"}
+                                          onClick={() => setDraft({
+                                            ...draft,
+                                            poles: {
+                                              ...draft.poles,
+                                              [pole.id]: { ...x, memberModes: { ...(x.memberModes ?? {}), [m.id]: "direct" } },
+                                            },
+                                          })}
+                                        >
+                                          Affecter directement
+                                        </Button>
+                                      </div>
+                                      {draft.detailed_scheduling && draft.serviceSlots.length > 0 ? (
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                          {draft.serviceSlots.map((slot, slotIndex) => (
+                                            <label key={slot.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                              <Checkbox
+                                                checked={(x.memberSlotIds?.[m.id] ?? draft.serviceSlots.map((s) => s.key)).includes(slot.key)}
+                                                onCheckedChange={(checkedSlot) => {
+                                                  const current = x.memberSlotIds?.[m.id] ?? draft.serviceSlots.map((s) => s.key);
+                                                  const next = checkedSlot === true
+                                                    ? [...new Set([...current, slot.key])]
+                                                    : current.filter((key) => key !== slot.key);
+                                                  setDraft({
+                                                    ...draft,
+                                                    poles: {
+                                                      ...draft.poles,
+                                                      [pole.id]: {
+                                                        ...x,
+                                                        memberSlotIds: { ...(x.memberSlotIds ?? {}), [m.id]: next },
+                                                      },
+                                                    },
+                                                  });
+                                                }}
+                                              />
+                                              {slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : `Créneau ${slotIndex + 1}`}
+                                              {slot.start_time && slot.end_time ? ` · ${slot.start_time}–${slot.end_time}` : ""}
+                                            </label>
+                                          ))}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
                                   <span className="flex flex-wrap items-center gap-3">
                                     <small className={inactive || u ? "font-bold text-red-600" : "text-green-700"}>
                                       {inactive ? "Inactif" : u ? "Indisponible" : null}
