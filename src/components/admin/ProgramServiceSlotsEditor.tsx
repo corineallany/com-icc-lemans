@@ -219,7 +219,10 @@ export function ProgramServiceSlotsEditor(props: Props) {
                       const d = new Date(`${slot.service_date}T12:00:00`);
                       d.setDate(d.getDate() - 1);
                       const previousDate = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
-                      return !props.slots.some((s) => s.service_date === previousDate && s.start_time && s.end_time);
+                      const sameDaySlots = props.slots.filter((s) => s.service_date === slot.service_date);
+                      const slotIndex = sameDaySlots.findIndex((s) => s.key === slot.key);
+                      const previousSlot = props.slots.filter((s) => s.service_date === previousDate)[slotIndex];
+                      return !previousSlot?.start_time || !previousSlot?.end_time;
                     })()}
                     onClick={() => copyPreviousHours(slot)}
                   >
