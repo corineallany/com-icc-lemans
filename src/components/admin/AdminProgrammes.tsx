@@ -454,12 +454,12 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         }
       const mr = rows.flatMap((a, i) =>
         [...new Set([
-          ...sel[i][1].memberIds.filter((memberId) => (sel[i][1].memberModes?.[memberId] ?? "direct") === "direct"),
+          ...sel[i][1].memberIds,
           ...(directByPole.get(a.pole_id) ?? []),
         ])].map(
           (member_id) => {
             const previous: any = previousByPoleMember.get(`${a.pole_id}::${member_id}`);
-            const assignment_mode = previous?.assignment_mode ?? "direct";
+            const assignment_mode = sel[i][1].memberModes?.[member_id] ?? previous?.assignment_mode ?? "direct";
             return {
               assignment_id: a.id,
               member_id,
@@ -483,19 +483,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         if (x.error) throw new Error(x.error.message);
         savedMembers = x.data ?? [];
       }
-      // Send solicitations through the same server workflow used in the programme sheet,
-      // rather than merely setting a display flag on an assignment row.
-      for (const assignment of rows) {
-        const poleDraft = selectedPoles[assignment.pole_id];
-        for (const memberId of poleDraft.memberIds) {
-          if ((poleDraft.memberModes?.[memberId] ?? "direct") !== "solicited") continue;
-          const { error } = await (supabase as any).rpc("solicit_program_member", {
-            p_assignment_id: assignment.id,
-            p_member_id: memberId,
-          });
-          if (error) throw error;
-        }
-      }
+      // Les deux modes sont enregistrés sur l’affectation membre ; une sollicitation reste en attente de réponse.
 
       // Reload member rows so both direct assignments and newly created solicitations
       // can be linked to the precise service slots selected in the pole block.
