@@ -43,7 +43,10 @@ with check (
     join public.program_service_slots pss on pss.id = program_assignment_slot_needs.service_slot_id
     where pa.id = program_assignment_slot_needs.assignment_id
       and pa.program_id = pss.program_id
-      and public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+      and (
+        public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+        or public.scope_allows_pole(auth.uid(), 'programmes', 'affecter', pa.pole_id)
+      )
   )
 );
 
@@ -58,7 +61,10 @@ using (
     join public.program_service_slots pss on pss.id = program_assignment_slot_needs.service_slot_id
     where pa.id = program_assignment_slot_needs.assignment_id
       and pa.program_id = pss.program_id
-      and public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+      and (
+        public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+        or public.scope_allows_pole(auth.uid(), 'programmes', 'affecter', pa.pole_id)
+      )
   )
 )
 with check (
@@ -68,7 +74,10 @@ with check (
     join public.program_service_slots pss on pss.id = program_assignment_slot_needs.service_slot_id
     where pa.id = program_assignment_slot_needs.assignment_id
       and pa.program_id = pss.program_id
-      and public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+      and (
+        public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+        or public.scope_allows_pole(auth.uid(), 'programmes', 'affecter', pa.pole_id)
+      )
   )
 );
 
@@ -83,7 +92,10 @@ using (
     join public.program_service_slots pss on pss.id = program_assignment_slot_needs.service_slot_id
     where pa.id = program_assignment_slot_needs.assignment_id
       and pa.program_id = pss.program_id
-      and public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+      and (
+        public.scope_allows_program(auth.uid(), 'programmes', 'modifier', pa.program_id)
+        or public.scope_allows_pole(auth.uid(), 'programmes', 'affecter', pa.pole_id)
+      )
   )
 );
 
