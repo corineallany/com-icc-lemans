@@ -227,6 +227,18 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
     }
     const dayMap = new Map((dayRes.data ?? []).map((d: any) => [d.id, d.service_date]));
     const assignmentMap = new Map(p.assignments.map((a: any) => [a.id, a.pole_id]));
+    for (const memberAssignment of (memberRows.data ?? []) as any[]) {
+      const poleId = assignmentMap.get(memberAssignment.assignment_id);
+      if (!poleId) continue;
+      const existing = map[poleId] ?? { selected: true, tasks: "", memberIds: [], requiredBySlot: {}, memberModes: {}, memberSlotIds: {} };
+      map[poleId] = {
+        ...existing,
+        memberModes: {
+          ...(existing.memberModes ?? {}),
+          [memberAssignment.member_id]: memberAssignment.assignment_mode === "solicited" ? "solicited" : "direct",
+        },
+      };
+    }
     const serviceSlots: ServiceSlotDraft[] = (slotRes.data ?? []).map((s: any) => ({
       key: s.id,
       service_date: dayMap.get(s.program_day_id) ?? p.start_date ?? "",
