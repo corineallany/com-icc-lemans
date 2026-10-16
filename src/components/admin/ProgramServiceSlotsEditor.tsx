@@ -56,14 +56,17 @@ export function ProgramServiceSlotsEditor(props: Props) {
 
   // Copy hours only. Never change the target slot's date.
   const copyPreviousHours = (target: ServiceSlotDraft) => {
-    const previous = props.slots
-      .filter((slot) => slot.key !== target.key && slot.service_date < target.service_date)
-      .sort((a, b) => b.service_date.localeCompare(a.service_date))[0];
-    if (!previous) return;
-    const sourceOnPreviousDate = props.slots
-      .filter((slot) => slot.service_date === previous.service_date)
-      .sort((a, b) => a.start_time.localeCompare(b.start_time));
-    const source = sourceOnPreviousDate.find((slot) => slot.start_time && slot.end_time);
+    const targetDate = new Date(`${target.service_date}T12:00:00`);
+    targetDate.setDate(targetDate.getDate() - 1);
+    const previousDate = [
+      targetDate.getFullYear(),
+      String(targetDate.getMonth() + 1).padStart(2, "0"),
+      String(targetDate.getDate()).padStart(2, "0"),
+    ].join("-");
+    const source = props.slots
+      .filter((slot) => slot.key !== target.key && slot.service_date === previousDate)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+      .find((slot) => slot.start_time && slot.end_time);
     if (source) update(target.key, { start_time: source.start_time, end_time: source.end_time });
   };
 
@@ -200,7 +203,12 @@ export function ProgramServiceSlotsEditor(props: Props) {
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={!slot.service_date || !props.slots.some((s) => s.service_date < slot.service_date && s.start_time && s.end_time)}
+                    disabled={!slot.service_date || (() => {
+                      const d = new Date(`${slot.service_date}T12:00:00`);
+                      d.setDate(d.getDate() - 1);
+                      const previousDate = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+                      return !props.slots.some((s) => s.service_date === previousDate && s.start_time && s.end_time);
+                    })()}
                     onClick={() => copyPreviousHours(slot)}
                   >
                     <Copy className="mr-1 size-3.5" />
