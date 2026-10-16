@@ -63,18 +63,30 @@ export function ProgramServiceSlotsEditor(props: Props) {
       String(targetDate.getMonth() + 1).padStart(2, "0"),
       String(targetDate.getDate()).padStart(2, "0"),
     ].join("-");
-    const source = props.slots
-      .filter((slot) => slot.key !== target.key && slot.service_date === previousDate)
-      .sort((a, b) => a.start_time.localeCompare(b.start_time))
-      .find((slot) => slot.start_time && slot.end_time);
-    if (source) update(target.key, { start_time: source.start_time, end_time: source.end_time });
+    const targetDaySlots = props.slots.filter((slot) => slot.service_date === target.service_date);
+    const targetIndex = targetDaySlots.findIndex((slot) => slot.key === target.key);
+    const previousDaySlots = props.slots.filter((slot) => slot.service_date === previousDate);
+    const source = previousDaySlots[targetIndex];
+    if (source?.start_time && source?.end_time) {
+      update(target.key, { start_time: source.start_time, end_time: source.end_time });
+    }
   };
 
   const copyHoursForward = (source: ServiceSlotDraft) => {
     if (!source.start_time || !source.end_time) return;
+    const sourceDaySlots = props.slots.filter((slot) => slot.service_date === source.service_date);
+    const sourceIndex = sourceDaySlots.findIndex((slot) => slot.key === source.key);
+    const futureDates = [...new Set(props.slots
+      .filter((slot) => slot.service_date > source.service_date)
+      .map((slot) => slot.service_date))].sort();
+    const targets = new Set(
+      futureDates
+        .map((date) => props.slots.filter((slot) => slot.service_date === date)[sourceIndex]?.key)
+        .filter((key): key is string => !!key),
+    );
     props.onChange(
       props.slots.map((slot) =>
-        slot.key !== source.key && slot.service_date > source.service_date
+        targets.has(slot.key)
           ? { ...slot, start_time: source.start_time, end_time: source.end_time }
           : slot,
       ),
