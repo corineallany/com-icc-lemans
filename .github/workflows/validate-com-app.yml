@@ -1,6 +1,8 @@
 name: Validate COM ICC Le Mans
 
 on:
+  push:
+    branches: [feature/program-slots-and-staffing-redesign]
   pull_request:
     branches: [main]
   workflow_dispatch:
