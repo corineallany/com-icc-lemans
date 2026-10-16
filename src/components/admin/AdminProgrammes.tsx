@@ -1128,6 +1128,39 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                 </p>
                               </div>
                             ) : null}
+                            <label className="flex items-center gap-2 rounded-lg bg-muted/30 px-2 py-1.5 text-xs font-semibold">
+                              <Checkbox
+                                checked={pm.filter((m: any) => m.status === "active" && !m.archived && !m.deleted).length > 0 && pm.filter((m: any) => m.status === "active" && !m.archived && !m.deleted).every((m: any) => x.memberIds.includes(m.id))}
+                                onCheckedChange={(value) => {
+                                  const eligible = pm.filter((m: any) => m.status === "active" && !m.archived && !m.deleted);
+                                  const ids = value === true
+                                    ? [...new Set([...x.memberIds, ...eligible.map((m: any) => m.id)])]
+                                    : x.memberIds.filter((id) => !eligible.some((m: any) => m.id === id));
+                                  const memberModes = { ...(x.memberModes ?? {}) };
+                                  const memberSlotIds = { ...(x.memberSlotIds ?? {}) };
+                                  for (const person of eligible) {
+                                    if (value === true) {
+                                      memberModes[person.id] = memberModes[person.id] ?? "direct";
+                                      memberSlotIds[person.id] = memberSlotIds[person.id] ?? draft.serviceSlots.map((slot) => slot.key);
+                                    } else {
+                                      delete memberModes[person.id];
+                                      delete memberSlotIds[person.id];
+                                    }
+                                  }
+                                  setDraft({
+                                    ...draft,
+                                    poles: {
+                                      ...draft.poles,
+                                      [pole.id]: { ...x, memberIds: ids, memberModes, memberSlotIds },
+                                    },
+                                    travel_member_ids: value === true
+                                      ? draft.travel_member_ids
+                                      : draft.travel_member_ids.filter((id) => !eligible.some((m: any) => m.id === id)),
+                                  });
+                                }}
+                              />
+                              Sélectionner tous les membres du pôle
+                            </label>
                             {pm.map((m) => {
                               const inactive = m.status !== "active",
                                 u = unavailable(m.id),
