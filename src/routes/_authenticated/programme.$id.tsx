@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { ProgramFullExport } from "@/components/programs/ProgramFullExport";
 import { ProgramParticipationPanel } from "@/components/programs/ProgramParticipationPanel";
+import { ProgramStaffingSummary } from "@/components/programs/ProgramStaffingSummary";
 import { CopyProgramLinkButton } from "@/components/programs/CopyProgramLinkButton";
 import { useCurrentRole } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -443,6 +444,7 @@ function ProgramSheet() {
       <Tabs defaultValue="infos">
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="infos">Informations</TabsTrigger>
+          <TabsTrigger value="participation">Participation & besoins</TabsTrigger>
           <TabsTrigger value="taches">Tâches / checklist</TabsTrigger>
           <TabsTrigger value="equipe">Équipe du jour</TabsTrigger>
           <TabsTrigger value="documents">Documents & notes</TabsTrigger>
@@ -526,6 +528,21 @@ function ProgramSheet() {
               </CardContent>
             </Card>
           ) : null}
+        </TabsContent>
+        <TabsContent value="participation" className="space-y-4">
+          <ProgramStaffingSummary
+            programId={id}
+            assignments={program.assignments as any}
+            poleName={poleName}
+            isStaff={isStaff}
+          />
+          <ProgramParticipationPanel
+            programId={id}
+            programTitle={program.title}
+            assignments={program.assignments as any}
+            members={(members.data?.members ?? []) as any}
+            poles={(poles.data ?? []) as any}
+          />
         </TabsContent>
         <TabsContent value="taches">
           <Card>
@@ -811,13 +828,6 @@ function ProgramSheet() {
         </DialogContent>
       </Dialog>
     
-      <ProgramParticipationPanel
-        programId={id}
-        programTitle={program.title}
-        assignments={program.assignments as any}
-        members={(members.data?.members ?? []) as any}
-        poles={(poles.data ?? []) as any}
-      />
 </AppShell>
   );
 }
