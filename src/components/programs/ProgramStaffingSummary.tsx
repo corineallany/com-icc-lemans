@@ -83,7 +83,7 @@ export function ProgramStaffingSummary({
     const member = memberById.get(row.assignment_member_id);
     if (!member || member.process_status === "covered") continue;
     const response = responseByMember.get(member.member_id);
-    const confirmed = member.assignment_mode !== "solicited" || ["available", "accepted", "confirmed"].includes(String(response));
+    const confirmed = member.assignment_mode !== "solicited" || ["available", "partial"].includes(String(response));
     if (!confirmed) continue;
     const key = `${member.assignment_id}::${row.service_slot_id}`;
     if (!assignedBySlot.has(key)) assignedBySlot.set(key, new Set());
