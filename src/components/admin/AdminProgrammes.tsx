@@ -573,7 +573,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
             const savedSlot = (slotIns.data ?? []).find((saved: any) => saved.position === slotIndex);
             if (!savedSlot) return [];
             return poleDraft.memberIds.flatMap((memberId) => {
-              const selectedSlots = poleDraft.memberSlotIds?.[memberId] ?? [];
+              const selectedSlots = poleDraft.memberSlotIds?.[memberId] ?? v.serviceSlots.map((item) => item.key);
               if (!selectedSlots.includes(slot.key)) return [];
               const am = savedMembers.find(
                 (m: any) => m.assignment_id === assignment.id && m.member_id === memberId,
