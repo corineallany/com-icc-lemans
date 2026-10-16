@@ -454,7 +454,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         }
       const mr = rows.flatMap((a, i) =>
         [...new Set([
-          ...sel[i][1].memberIds,
+          ...sel[i][1].memberIds.filter((memberId) => (sel[i][1].memberModes?.[memberId] ?? "direct") === "direct"),
           ...(directByPole.get(a.pole_id) ?? []),
         ])].map(
           (member_id) => {
@@ -483,7 +483,19 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         if (x.error) throw new Error(x.error.message);
         savedMembers = x.data ?? [];
       }
-      // Les deux modes sont enregistrés sur l’affectation membre ; une sollicitation reste en attente de réponse.
+      // Send solicitations through the established server workflow so it creates
+      // the pending response and notification with the same authorization checks.
+      for (const assignment of rows) {
+        const poleDraft = selectedPoles[assignment.pole_id];
+        for (const memberId of poleDraft.memberIds) {
+          if ((poleDraft.memberModes?.[memberId] ?? "direct") !== "solicited") continue;
+          const { error } = await (supabase as any).rpc("solicit_program_member", {
+            p_assignment_id: assignment.id,
+            p_member_id: memberId,
+          });
+          if (error) throw error;
+        }
+      }
 
       // Reload member rows so both direct assignments and newly created solicitations
       // can be linked to the precise service slots selected in the pole block.
