@@ -67,7 +67,7 @@ const RECURRENCES = [
   ["trimestriel", "Trimestriel"],
   ["annuel", "Annuel"],
 ];
-type PoleDraft = { selected: boolean; tasks: string; memberIds: string[] };
+type PoleDraft = { selected: boolean; tasks: string; memberIds: string[]; requiredBySlot: Record<string, number | ""> };
 type Draft = {
   id: string | null;
   creation_key: string;
@@ -180,7 +180,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
   async function edit(p: ProgramWithDetails) {
     const map: Record<string, PoleDraft> = {};
     p.assignments.forEach(
-      (a) => (map[a.pole_id] = { selected: true, tasks: a.tasks ?? "", memberIds: a.memberIds }),
+      (a) => (map[a.pole_id] = { selected: true, tasks: a.tasks ?? "", memberIds: a.memberIds, requiredBySlot: {} }),
     );
     setPendingFiles([]);
     const t = supabase as any;
@@ -203,6 +203,13 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
             p.assignments.map((a) => a.id),
           )
       : { data: [], error: null };
+    const needRes = p.assignments.length && (slotRes.data ?? []).length
+      ? await t
+          .from("program_assignment_slot_needs")
+          .select("assignment_id,service_slot_id,required_count")
+          .in("assignment_id", p.assignments.map((a: any) => a.id))
+          .in("service_slot_id", (slotRes.data ?? []).map((s: any) => s.id))
+      : { data: [], error: null };
     const memberSlots = (slotRes.data ?? []).length
       ? await t
           .from("program_assignment_member_slots")
@@ -212,8 +219,8 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
             slotRes.data.map((s: any) => s.id),
           )
       : { data: [], error: null };
-    if (memberRows.error || memberSlots.error) {
-      toast.error("Impossible de charger les affectations des créneaux.");
+    if (memberRows.error || memberSlots.error || needRes.error) {
+      toast.error("Impossible de charger les besoins ou affectations des créneaux.");
       return;
     }
     const dayMap = new Map((dayRes.data ?? []).map((d: any) => [d.id, d.service_date]));
@@ -233,6 +240,19 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         )
         .filter(Boolean),
     }));
+    for (const need of (needRes.data ?? []) as any[]) {
+      const poleId = assignmentMap.get(
+        p.assignments.find((a: any) => a.id === need.assignment_id)?.id ?? "",
+      );
+      const slot = serviceSlots.find((s) => s.key === need.service_slot_id);
+      if (poleId && slot) {
+        const existing = map[poleId] ?? { selected: true, tasks: "", memberIds: [], requiredBySlot: {} };
+        map[poleId] = {
+          ...existing,
+          requiredBySlot: { ...(existing.requiredBySlot ?? {}), [slot.key]: Number(need.required_count) },
+        };
+      }
+    }
     setDraft({
       id: p.id,
       creation_key: (p as any).creation_key ?? crypto.randomUUID(),
@@ -312,13 +332,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         )
       )
         throw new Error("Chaque créneau doit avoir un jour et des horaires valides.");
-      const slotPoleIds = new Set(v.serviceSlots.map((s) => s.pole_id).filter(Boolean));
       const selectedPoles = { ...v.poles };
-      for (const poleId of slotPoleIds)
-        selectedPoles[poleId] = {
-          ...(selectedPoles[poleId] ?? { tasks: "", memberIds: [] }),
-          selected: true,
-        };
       const targetPoles = Object.entries(selectedPoles).filter(([, x]) => x.selected).map(([id]) => id);
       const check = await (supabase as any).rpc("check_program_write_access", { p_program_id: v.id ?? null, p_poles: targetPoles, p_generate: dates.length > 1 });
       if (check.error) throw check.error;
@@ -327,8 +341,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         creation_key: v.creation_key,
         title: v.title.trim(),
         description: v.description.trim() || null,
-        program_type: v.program_type || null,
-        start_date: v.start_date || null,
+        program_type: v.program_type || null,        start_date: v.start_date || null,
         start_time: v.start_time || null,
         end_date: v.end_date || null,
         end_time: v.end_time || null,
@@ -457,11 +470,11 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         const slotRows = v.serviceSlots.map((s, position) => ({
           program_id: id,
           program_day_id: dayByDate.get(s.service_date),
-          assignment_id: rows.find((r) => r.pole_id === s.pole_id)?.id ?? null,
-          label: s.label.trim() || null,
+          assignment_id: null,
+          label: null,
           start_time: s.start_time,
           end_time: s.end_time,
-          required_count: Math.max(1, Number(s.required_count) || 1),
+          required_count: 1,
           position,
         }));
         const slotIns = await db
@@ -469,6 +482,29 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           .insert(slotRows)
           .select("id,position");
         if (slotIns.error) throw slotIns.error;
+
+        // Staffing requirements are stored separately from the time slots:
+        // one time slot can have independent headcounts for several poles.
+        const needRows = rows.flatMap((assignment) => {
+          const poleDraft = selectedPoles[assignment.pole_id];
+          return v.serviceSlots.flatMap((slot, slotIndex) => {
+            const rawCount = poleDraft?.requiredBySlot?.[slot.key];
+            if (rawCount === undefined || rawCount === "" || Number(rawCount) < 1) return [];
+            const savedSlot = (slotIns.data ?? []).find((saved: any) => saved.position === slotIndex);
+            return savedSlot
+              ? [{
+                  assignment_id: assignment.id,
+                  service_slot_id: savedSlot.id,
+                  required_count: Math.max(1, Math.floor(Number(rawCount))),
+                }]
+              : [];
+          });
+        });
+        if (needRows.length) {
+          const needsInsert = await db.from("program_assignment_slot_needs").insert(needRows);
+          if (needsInsert.error) throw needsInsert.error;
+        }
+
         const memberSlots = v.serviceSlots.flatMap((s, slotIndex) =>
           s.memberIds
             .map((memberId) => {
@@ -657,8 +693,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                   <Input
                     type="date"
                     value={draft.start_date}
-                    onChange={(e) =>
-                      setDraft({
+                    onChange={(e) =>                      setDraft({
                         ...draft,
                         start_date: e.target.value,
                         response_deadline:
@@ -785,51 +820,14 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                 }
                 onChange={(serviceSlots) => setDraft({ ...draft, serviceSlots })}
               />
-              <section className="rounded-xl border p-4">
-                <h3 className="font-black text-icc-violet">Fichiers du programme</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Ajoute plusieurs fichiers : photos, PDF, Word, Excel ou tout autre document utile.
-                  25 Mo maximum par fichier.
-                </p>
-                <Input
-                  className="mt-3"
-                  type="file"
-                  multiple
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    setPendingFiles((prev) => [...prev, ...files]);
-                    e.currentTarget.value = "";
-                  }}
-                />
-                {pendingFiles.length ? (
-                  <div className="mt-3 space-y-2">
-                    {pendingFiles.map((f, i) => (
-                      <div
-                        key={`${f.name}-${i}`}
-                        className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm"
-                      >
-                        <span className="min-w-0 truncate">📎 {f.name}</span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setPendingFiles((x) => x.filter((_, j) => j !== i))}
-                        >
-                          Retirer
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
               <section>
                 <h3 className="mb-2 font-black text-icc-violet">Pôles et membres mobilisés</h3>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Les membres proposés dans chaque bloc appartiennent à ce pôle. Une personne cochée ici est affectée directement : aucune réponse ne lui sera demandée. Pour solliciter une personne et attendre sa réponse, enregistre le programme puis utilise le bloc « Solliciter » dans sa fiche. Pour un programme en déplacement, coche « Déplacement » uniquement sur les personnes qui partent ; les autres restent sur place par défaut.
+                  Sélectionne les pôles concernés, précise la mission et le besoin pour chaque créneau, puis choisis les membres à mobiliser. Les fichiers du programme se trouvent à la fin du formulaire.
                 </p>
                 <div className="space-y-3">
                   {activePoles.map((pole) => {
-                    const x = draft.poles[pole.id] ?? { selected: false, tasks: "", memberIds: [] };
+                    const x = draft.poles[pole.id] ?? { selected: false, tasks: "", memberIds: [], requiredBySlot: {} };
                     const pm = allMembers.filter((m) =>
                       links.some((l) => l.pole_id === pole.id && l.member_id === m.id),
                     );
@@ -854,7 +852,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                         {x.selected && (
                           <div className="mt-3 space-y-2">
                             <Input
-                              placeholder={`Mission / tâche du pôle ${pole.name}`}
+                              placeholder={`Mission à préciser pour le pôle ${pole.name}`}
                               value={x.tasks}
                               onChange={(e) =>
                                 setDraft({
@@ -866,6 +864,54 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                 })
                               }
                             />
+                            {draft.detailed_scheduling && draft.serviceSlots.length > 0 ? (
+                              <div className="space-y-2 rounded-lg border bg-background p-3">
+                                <p className="text-sm font-semibold">Effectif nécessaire par créneau</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Indique le nombre de personnes nécessaires pour ce pôle sur chaque créneau. Les dates et horaires restent ceux définis plus haut.
+                                </p>
+                                {draft.serviceSlots.map((slot, slotIndex) => (
+                                  <div key={slot.key} className="grid items-center gap-2 sm:grid-cols-[1fr_110px]">
+                                    <label className="text-sm">
+                                      <span className="font-medium">Créneau {slotIndex + 1}</span>
+                                      <span className="ml-2 text-muted-foreground">
+                                        {slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à définir"}
+                                        {slot.start_time && slot.end_time ? ` · ${slot.start_time}–${slot.end_time}` : ""}
+                                      </span>
+                                    </label>
+                                    <Input
+                                      aria-label={`Effectif nécessaire pour ${pole.name}, créneau ${slotIndex + 1}`}
+                                      type="number"
+                                      min={1}
+                                      placeholder="À définir"
+                                      value={x.requiredBySlot?.[slot.key] ?? ""}
+                                      onChange={(e) => setDraft({
+                                        ...draft,
+                                        poles: {
+                                          ...draft.poles,
+                                          [pole.id]: {
+                                            ...x,
+                                            requiredBySlot: {
+                                              ...(x.requiredBySlot ?? {}),
+                                              [slot.key]: e.target.value === "" ? "" : Math.max(1, Math.floor(Number(e.target.value))),
+                                            },
+                                          },
+                                        },
+                                      })}
+                                    />
+                                  </div>
+                                ))}
+                                <p className="text-xs text-muted-foreground">
+                                  Le total des postes à couvrir est calculé à partir des effectifs saisis pour chaque créneau.
+                                </p>
+                                <p className="text-sm font-semibold">
+                                  Total : {draft.serviceSlots.reduce((total, slot) => {
+                                    const count = x.requiredBySlot?.[slot.key];
+                                    return total + (count === "" || count == null ? 0 : Math.max(0, Number(count)));
+                                  }, 0)} poste(s)-créneau
+                                </p>
+                              </div>
+                            ) : null}
                             {pm.map((m) => {
                               const inactive = m.status !== "active",
                                 u = unavailable(m.id),
@@ -935,6 +981,44 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                   })}
                 </div>
               </section>
+              <section className="rounded-xl border p-4">
+                <h3 className="font-black text-icc-violet">Fichiers du programme</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Ajoute plusieurs fichiers : photos, PDF, Word, Excel ou tout autre document utile.
+                  25 Mo maximum par fichier.
+                </p>
+                <Input
+                  className="mt-3"
+                  type="file"
+                  multiple
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    setPendingFiles((prev) => [...prev, ...files]);
+                    e.currentTarget.value = "";
+                  }}
+                />
+                {pendingFiles.length ? (
+                  <div className="mt-3 space-y-2">
+                    {pendingFiles.map((f, i) => (
+                      <div
+                        key={`${f.name}-${i}`}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm"
+                      >
+                        <span className="min-w-0 truncate">📎 {f.name}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setPendingFiles((x) => x.filter((_, j) => j !== i))}
+                        >
+                          Retirer
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+
             </div>
           )}
           <DialogFooter>
