@@ -46,9 +46,15 @@ export function ProgramStaffingSummary({
 
       const { data: memberRows, error: memberError } = await db
         .from("program_assignment_members")
-        .select("id,assignment_id,member_id")
+        .select("id,assignment_id,member_id,assignment_mode,process_status")
         .in("assignment_id", assignmentIds);
       if (memberError) throw memberError;
+
+      const { data: responses, error: responsesError } = await db
+        .from("program_member_responses")
+        .select("member_id,status")
+        .eq("program_id", programId);
+      if (responsesError) throw responsesError;
 
       const memberIds = (memberRows ?? []).map((m: any) => m.id);
       const { data: memberSlots, error: memberSlotsError } = memberIds.length
@@ -60,7 +66,7 @@ export function ProgramStaffingSummary({
         : { data: [], error: null };
       if (memberSlotsError) throw memberSlotsError;
 
-      return { needs: needs ?? [], slots: slots ?? [], days: days ?? [], memberRows: memberRows ?? [], memberSlots: memberSlots ?? [] };
+      return { needs: needs ?? [], slots: slots ?? [], days: days ?? [], memberRows: memberRows ?? [], memberSlots: memberSlots ?? [], responses: responses ?? [] };
     },
   });
 
@@ -71,10 +77,14 @@ export function ProgramStaffingSummary({
   const dayById = new Map((data?.days ?? []).map((day: any) => [day.id, day.service_date]));
   const slotById = new Map((data?.slots ?? []).map((slot: any) => [slot.id, slot]));
   const memberById = new Map((data?.memberRows ?? []).map((member: any) => [member.id, member]));
+  const responseByMember = new Map((data?.responses ?? []).map((response: any) => [response.member_id, response.status]));
   const assignedBySlot = new Map<string, Set<string>>();
   for (const row of data?.memberSlots ?? []) {
     const member = memberById.get(row.assignment_member_id);
-    if (!member) continue;
+    if (!member || member.process_status === "covered") continue;
+    const response = responseByMember.get(member.member_id);
+    const confirmed = member.assignment_mode !== "solicited" || ["available", "accepted", "confirmed"].includes(String(response));
+    if (!confirmed) continue;
     const key = `${member.assignment_id}::${row.service_slot_id}`;
     if (!assignedBySlot.has(key)) assignedBySlot.set(key, new Set());
     assignedBySlot.get(key)!.add(member.member_id);
