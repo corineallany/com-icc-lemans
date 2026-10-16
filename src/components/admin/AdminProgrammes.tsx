@@ -488,12 +488,16 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       // Reload member rows so both direct assignments and newly created solicitations
       // can be linked to the precise service slots selected in the pole block.
       const savedAssignmentIds = rows.map((row) => row.id);
-      savedMembers = savedAssignmentIds.length
-        ? ((await (supabase as any)
-            .from("program_assignment_members")
-            .select("id,assignment_id,member_id")
-            .in("assignment_id", savedAssignmentIds)).data ?? [])
-        : [];
+      if (savedAssignmentIds.length) {
+        const savedRows = await (supabase as any)
+          .from("program_assignment_members")
+          .select("id,assignment_id,member_id")
+          .in("assignment_id", savedAssignmentIds);
+        if (savedRows.error) throw savedRows.error;
+        savedMembers = savedRows.data ?? [];
+      } else {
+        savedMembers = [];
+      }
 
       const db = supabase as any;
       await db.from("program_service_slots").delete().eq("program_id", id);
@@ -886,8 +890,8 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                       <div className="mt-3 space-y-2">
                         {allMembers.filter((m: any) => m.status === "active" && !m.archived && !m.deleted).map((m: any) => {
                           const memberPoleIds = [...new Set(links.filter((link: any) => link.member_id === m.id && activePoles.some((p) => p.id === link.pole_id)).map((link: any) => link.pole_id))];
-                          const chosenPoleId = globalPoleChoice[m.id] ?? memberPoleIds[0] ?? "";
                           const selection = Object.entries(draft.poles).find(([, value]) => value.memberIds.includes(m.id));
+                          const chosenPoleId = globalPoleChoice[m.id] ?? selection?.[0] ?? memberPoleIds[0] ?? "";
                           const checked = !!selection;
                           const selectedPoleId = selection?.[0] ?? chosenPoleId;
                           const selectedPoleDraft = draft.poles[selectedPoleId] ?? { selected: false, tasks: "", memberIds: [], requiredBySlot: {}, memberModes: {}, memberSlotIds: {} };
