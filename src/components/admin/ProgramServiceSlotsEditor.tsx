@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/**
+ * The legacy fields remain in the draft type temporarily so existing saved
+ * programmes can be edited safely. The UI for a service slot intentionally
+ * exposes only its date and hours; staffing is configured by pole below.
+ */
 export type ServiceSlotDraft = {
   key: string;
   service_date: string;
@@ -48,6 +53,31 @@ const makeSlot = (date = ""): ServiceSlotDraft => ({
 export function ProgramServiceSlotsEditor(props: Props) {
   const update = (key: string, patch: Partial<ServiceSlotDraft>) =>
     props.onChange(props.slots.map((slot) => (slot.key === key ? { ...slot, ...patch } : slot)));
+
+  // Copy hours only. Never change the target slot's date.
+  const copyPreviousHours = (target: ServiceSlotDraft) => {
+    const previous = props.slots
+      .filter((slot) => slot.key !== target.key && slot.service_date < target.service_date)
+      .sort((a, b) => b.service_date.localeCompare(a.service_date))[0];
+    if (!previous) return;
+    const sourceOnPreviousDate = props.slots
+      .filter((slot) => slot.service_date === previous.service_date)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+    const source = sourceOnPreviousDate.find((slot) => slot.start_time && slot.end_time);
+    if (source) update(target.key, { start_time: source.start_time, end_time: source.end_time });
+  };
+
+  const copyHoursForward = (source: ServiceSlotDraft) => {
+    if (!source.start_time || !source.end_time) return;
+    props.onChange(
+      props.slots.map((slot) =>
+        slot.key !== source.key && slot.service_date > source.service_date
+          ? { ...slot, start_time: source.start_time, end_time: source.end_time }
+          : slot,
+      ),
+    );
+  };
+
   return (
     <section className="space-y-4 rounded-xl border border-violet-200 p-4">
       <label className="flex items-start gap-3">
@@ -58,8 +88,7 @@ export function ProgramServiceSlotsEditor(props: Props) {
         <span>
           <b>Programme avec plusieurs créneaux de service</b>
           <small className="block text-muted-foreground">
-            À utiliser même pour un programme d’une seule journée lorsque plusieurs équipes ou
-            horaires sont nécessaires.
+            À utiliser même pour un programme d’une seule journée lorsque plusieurs horaires sont nécessaires.
           </small>
         </span>
       </label>
@@ -88,7 +117,7 @@ export function ProgramServiceSlotsEditor(props: Props) {
                 <span>
                   <b>Laisser le membre choisir ses créneaux</b>
                   <small className="block text-muted-foreground">
-                    Le membre choisira directement dans la fiche du programme, dans le bloc « Mes créneaux ». Le responsable verra ensuite tous les choix reçus avant l’affectation finale.
+                    Le membre choisira dans la fiche du programme, dans « Mes créneaux ».
                   </small>
                 </span>
               </label>
@@ -98,7 +127,7 @@ export function ProgramServiceSlotsEditor(props: Props) {
             <div>
               <h3 className="font-black text-icc-violet">Créneaux du programme</h3>
               <p className="text-xs text-muted-foreground">
-                Jour, horaires, besoin et affectations directes éventuelles.
+                Ici, on définit uniquement la date et les horaires. Les besoins et les membres se règlent par pôle plus bas.
               </p>
             </div>
             <Button
@@ -116,135 +145,80 @@ export function ProgramServiceSlotsEditor(props: Props) {
               Ajoute au moins un créneau.
             </p>
           ) : (
-            props.slots.map((slot, index) => {
-              const candidates = props.members.filter(
-                (m) =>
-                  !slot.pole_id ||
-                  props.links.some((l) => l.member_id === m.id && l.pole_id === slot.pole_id),
-              );
-              return (
-                <div key={slot.key} className="space-y-3 rounded-xl border p-3">
-                  <div className="flex items-center justify-between">
-                    <b>Créneau {index + 1}</b>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => props.onChange(props.slots.filter((s) => s.key !== slot.key))}
-                    >
-                      <Trash2 className="size-4" />
-                      Retirer
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-                    <label className="text-xs font-semibold">
-                      Jour
-                      <Select
-                        value={slot.service_date || undefined}
-                        onValueChange={(v) => update(slot.key, { service_date: v })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choisir" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {props.dates.map((d) => (
-                            <SelectItem key={d} value={d}>
-                              {new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR")}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </label>
-                    <label className="text-xs font-semibold lg:col-span-2">
-                      Nom du créneau
-                      <Input
-                        placeholder="Installation, accueil…"
-                        value={slot.label}
-                        onChange={(e) => update(slot.key, { label: e.target.value })}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Début
-                      <Input
-                        type="time"
-                        value={slot.start_time}
-                        onChange={(e) => update(slot.key, { start_time: e.target.value })}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Fin
-                      <Input
-                        type="time"
-                        value={slot.end_time}
-                        onChange={(e) => update(slot.key, { end_time: e.target.value })}
-                      />
-                    </label>
-                    <label className="text-xs font-semibold">
-                      Personnes souhaitées
-                      <Input
-                        type="number"
-                        min={1}
-                        value={slot.required_count}
-                        onChange={(e) =>
-                          update(slot.key, {
-                            required_count: e.target.value === "" ? "" : Number(e.target.value),
-                          })
-                        }
-                        onBlur={() => {
-                          if (slot.required_count === "" || slot.required_count < 1)
-                            update(slot.key, { required_count: 1 });
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <label className="block text-xs font-semibold">
-                    Équipe / pôle (optionnel)
+            props.slots.map((slot, index) => (
+              <div key={slot.key} className="space-y-3 rounded-xl border p-3">
+                <div className="flex items-center justify-between">
+                  <b>Créneau {index + 1}</b>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => props.onChange(props.slots.filter((s) => s.key !== slot.key))}
+                  >
+                    <Trash2 className="size-4" />
+                    Retirer
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <label className="text-xs font-semibold">
+                    Date
                     <Select
-                      value={slot.pole_id || "all"}
-                      onValueChange={(v) =>
-                        update(slot.key, { pole_id: v === "all" ? "" : v, memberIds: [] })
-                      }
+                      value={slot.service_date || undefined}
+                      onValueChange={(v) => update(slot.key, { service_date: v })}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Choisir une date" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Tous les pôles</SelectItem>
-                        {props.poles.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name}
+                        {props.dates.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            {new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR")}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </label>
-                  <div>
-                    <p className="text-xs font-semibold">Affectation directe (optionnelle)</p>
-                    <div className="mt-1 grid max-h-40 gap-1 overflow-y-auto sm:grid-cols-2">
-                      {candidates.map((m) => (
-                        <label
-                          key={m.id}
-                          className="flex items-center gap-2 rounded-lg bg-muted/40 p-2 text-sm"
-                        >
-                          <Checkbox
-                            checked={slot.memberIds.includes(m.id)}
-                            onCheckedChange={(v) =>
-                              update(slot.key, {
-                                memberIds:
-                                  v === true
-                                    ? [...slot.memberIds, m.id]
-                                    : slot.memberIds.filter((id) => id !== m.id),
-                              })
-                            }
-                          />
-                          {m.full_name}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                  <label className="text-xs font-semibold">
+                    Heure de début
+                    <Input
+                      type="time"
+                      value={slot.start_time}
+                      onChange={(e) => update(slot.key, { start_time: e.target.value })}
+                    />
+                  </label>
+                  <label className="text-xs font-semibold">
+                    Heure de fin
+                    <Input
+                      type="time"
+                      value={slot.end_time}
+                      onChange={(e) => update(slot.key, { end_time: e.target.value })}
+                    />
+                  </label>
                 </div>
-              );
-            })
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!slot.service_date || !props.slots.some((s) => s.service_date < slot.service_date && s.start_time && s.end_time)}
+                    onClick={() => copyPreviousHours(slot)}
+                  >
+                    <Copy className="mr-1 size-3.5" />
+                    Mêmes horaires que la veille
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!slot.service_date || !slot.start_time || !slot.end_time || !props.slots.some((s) => s.service_date > slot.service_date)}
+                    onClick={() => copyHoursForward(slot)}
+                  >
+                    <Copy className="mr-1 size-3.5" />
+                    Mêmes horaires pour les jours suivants
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
         </>
       ) : null}
