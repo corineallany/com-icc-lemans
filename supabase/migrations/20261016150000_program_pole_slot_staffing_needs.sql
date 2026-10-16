@@ -10,6 +10,15 @@ create table if not exists public.program_assignment_slot_needs (
   unique (assignment_id, service_slot_id)
 );
 
+-- A member may cover more than one service slot on the same day. The older
+-- day-level uniqueness must not block the new slot-level associations.
+alter table public.program_assignment_member_slots
+  drop constraint if exists program_assignment_member_slots_assignment_member_id_program_day_id_key;
+
+create unique index if not exists program_assignment_member_slots_legacy_day_unique
+  on public.program_assignment_member_slots (assignment_member_id, program_day_id)
+  where service_slot_id is null;
+
 create index if not exists program_assignment_slot_needs_slot_idx
   on public.program_assignment_slot_needs(service_slot_id);
 create index if not exists program_assignment_slot_needs_assignment_idx
