@@ -117,6 +117,31 @@ function ProgramSheet() {
       return data ?? [];
     },
   });
+  const serviceSlots = useQuery({
+    queryKey: ["program-service-slots", id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("program_service_slots")
+        .select("*")
+        .eq("program_id", id)
+        .order("position");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const assignmentMemberSlots = useQuery({
+    queryKey: ["program-assignment-member-slots-sheet", id, (participationModes.data ?? []).map((x: any) => x.id).sort().join(",")],
+    enabled: (participationModes.data ?? []).length > 0,
+    queryFn: async () => {
+      const ids = (participationModes.data ?? []).map((x: any) => x.id);
+      const { data, error } = await (supabase as any)
+        .from("program_assignment_member_slots")
+        .select("assignment_member_id,service_slot_id")
+        .in("assignment_member_id", ids);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const poleName = new Map((poles.data ?? []).map((p) => [p.id, p.name]));
   const memberName = new Map((members.data?.members ?? []).map((m) => [m.id, m.full_name]));
   const programTasks = (tasks.data ?? []).filter((t) => t.program_id === id);
@@ -365,13 +390,29 @@ function ProgramSheet() {
       </AppShell>
     );
   const mine = member?.id ? responseOf(member.id) : null;
-  const confirmed = [
-    ...new Set([...assignedIds, ...((program as any).travel_member_ids ?? [])]),
-  ] as string[];
+  // L'équipe réelle ne comprend que les affectations confirmées, jamais les simples sollicitations.
+  const actualAssignments = participationRows.filter(
+    (r: any) =>
+      ["direct", "proposal"].includes(r.assignment_mode) &&
+      !["covered", "withdrawn", "refused"].includes(r.process_status),
+  );
+  const confirmed = [...new Set(actualAssignments.map((r: any) => r.member_id))] as string[];
   const travelTeam = confirmed.filter((mid) => teamLocation(mid) === "travel"),
     onsiteTeam = confirmed.filter((mid) => teamLocation(mid) === "onsite"),
     unassignedTeam = confirmed.filter((mid) => !teamLocation(mid));
   const hasTravel = canonicalProgramFormat(program.format).startsWith("deplacement");
+  const slotById = new Map((serviceSlots.data ?? []).map((slot: any) => [slot.id, slot]));
+  const slotsForAssignmentMember = (assignmentMemberId: string) =>
+    (assignmentMemberSlots.data ?? [])
+      .filter((x: any) => x.assignment_member_id === assignmentMemberId)
+      .map((x: any) => slotById.get(x.service_slot_id))
+      .filter(Boolean);
+  const slotLabel = (slot: any) =>
+    [slot.service_date ?? slot.date, slot.start_time && slot.end_time ? `${String(slot.start_time).slice(0,5)}–${String(slot.end_time).slice(0,5)}` : slot.start_time ?? slot.end_time]
+      .filter(Boolean)
+      .join(" · ") || "Créneau du programme";
+  const actualRowsAt = (location: "travel" | "onsite") =>
+    actualAssignments.filter((r: any) => teamLocation(r.member_id) === location);
   const teamRow = (mid: string) => (
     <div
       key={mid}
@@ -600,75 +641,57 @@ function ProgramSheet() {
           </Card>
         </TabsContent>
         <TabsContent value="equipe" className="space-y-4">
-          {hasTravel ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Répartition de l’équipe</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Répartition prévue, indépendante des réponses. {confirmed.length} membre(s) ·{" "}
-                  {travelTeam.length + onsiteTeam.length} réparti(s) · {unassignedTeam.length} à
-                  préciser.
-                </p>
-              </CardHeader>
-              <CardContent className="grid gap-4 lg:grid-cols-3">
-                <div>
-                  <h3 className="mb-2 font-black">
-                    🚐 Équipe en déplacement · {travelTeam.length}
-                  </h3>
-                  <div className="space-y-2">
-                    {travelTeam.length ? (
-                      travelTeam.map(teamRow)
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Personne pour le moment.</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="mb-2 font-black">🏠 Équipe sur place · {onsiteTeam.length}</h3>
-                  <div className="space-y-2">
-                    {onsiteTeam.length ? (
-                      onsiteTeam.map(teamRow)
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Personne pour le moment.</p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="mb-2 font-black">À préciser · {unassignedTeam.length}</h3>
-                  <div className="space-y-2">
-                    {unassignedTeam.length ? (
-                      unassignedTeam.map(teamRow)
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Toute l’équipe confirmée est répartie.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-          <Card>
-            <CardHeader>
-              <CardTitle>Équipe du jour</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {program.assignments.map((a) => (
-                <div key={a.id} className="rounded-lg border p-3">
-                  <b>{poleName.get(a.pole_id) ?? "Pôle"}</b>
-                  <p className="text-sm text-muted-foreground">{a.tasks}</p>
-                  {a.memberIds.map((mid) => (
-                    <p key={mid} className="text-sm">
-                      {memberName.get(mid) ?? mid} · {participationLabel(mid)}
-                      {hasTravel
-                        ? ` · ${teamLocation(mid) === "travel" ? "En déplacement" : teamLocation(mid) === "onsite" ? "Sur place" : "Répartition à préciser"}`
-                        : ""}
+          <p className="text-sm text-muted-foreground">
+            Seules les personnes effectivement affectées apparaissent ici. Les membres simplement sollicités restent dans « Participation & besoins » jusqu’à confirmation.
+          </p>
+          <Tabs defaultValue="sur-place">
+            <TabsList className="mb-3 flex-wrap">
+              <TabsTrigger value="sur-place">🏠 Sur place ({actualRowsAt("onsite").length})</TabsTrigger>
+              <TabsTrigger value="deplacement">🚐 En déplacement ({actualRowsAt("travel").length})</TabsTrigger>
+            </TabsList>
+            {(["onsite", "travel"] as const).map((location) => (
+              <TabsContent key={location} value={location === "onsite" ? "sur-place" : "deplacement"} className="space-y-3">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{location === "onsite" ? "Équipe affectée sur place" : "Équipe affectée en déplacement"}</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {actualRowsAt(location).length} affectation(s) confirmée(s). Les créneaux sont affichés lorsqu’ils sont associés à l’affectation.
                     </p>
-                  ))}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {actualRowsAt(location).length ? actualRowsAt(location).map((r: any) => {
+                      const assignment = (program.assignments ?? []).find((a) => a.id === r.assignment_id);
+                      const linkedSlots = slotsForAssignmentMember(r.id);
+                      return (
+                        <div key={r.id} className="rounded-lg border p-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <b>{memberName.get(r.member_id) ?? r.member_id}</b>
+                              <p className="text-sm text-muted-foreground">
+                                {poleName.get(assignment?.pole_id ?? "") ?? "Pôle"} · {r.assignment_mode === "direct" ? "Affectation directe" : "Proposition acceptée"}
+                              </p>
+                            </div>
+                            {isStaff ? (
+                              <div className="flex flex-wrap gap-1">
+                                <Button size="sm" variant={location === "onsite" ? "default" : "outline"} onClick={() => setTeamLocation.mutate({memberId:r.member_id,location:"onsite"})}>Sur place</Button>
+                                <Button size="sm" variant={location === "travel" ? "default" : "outline"} onClick={() => setTeamLocation.mutate({memberId:r.member_id,location:"travel"})}>En déplacement</Button>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {linkedSlots.length ? linkedSlots.map((slot: any) => (
+                              <Badge key={slot.id} variant="secondary">{slotLabel(slot)}</Badge>
+                            )) : <span className="text-xs text-muted-foreground">Aucun créneau individuel renseigné</span>}
+                          </div>
+                          {assignment?.tasks ? <p className="mt-2 text-sm">{assignment.tasks}</p> : null}
+                        </div>
+                      );
+                    }) : <EmptyState title={location === "onsite" ? "Aucune affectation confirmée sur place" : "Aucune affectation confirmée en déplacement"} />}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            ))}
+          </Tabs>
         </TabsContent>
         <TabsContent value="documents">
           <Card>
