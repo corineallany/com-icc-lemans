@@ -117,6 +117,18 @@ function ProgramSheet() {
       return data ?? [];
     },
   });
+  const programDays = useQuery({
+    queryKey: ["program-days-sheet", id],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("program_days")
+        .select("*")
+        .eq("program_id", id)
+        .order("service_date");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
   const serviceSlots = useQuery({
     queryKey: ["program-service-slots", id],
     queryFn: async () => {
@@ -497,9 +509,10 @@ function ProgramSheet() {
               <CardTitle>Informations générales</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2">
-              <Info label="Date" value={formatDate(program.start_date)} />
+              <Info label="Date de début" value={formatDate(program.start_date)} />
+              <Info label="Date de fin" value={formatDate(program.end_date ?? program.start_date)} />
               <Info
-                label="Horaires"
+                label="Horaires généraux"
                 value={`${program.start_time ?? "—"} → ${program.end_time ?? "—"}`}
               />
               <Info label="Lieu" value={program.location ?? "—"} />
@@ -516,6 +529,36 @@ function ProgramSheet() {
               ) : null}
             </CardContent>
           </Card>
+          {(programDays.data ?? []).length || (serviceSlots.data ?? []).length ? (
+            <Card>
+              <CardHeader><CardTitle>Déroulé détaillé et créneaux</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {(programDays.data ?? []).length ? (programDays.data ?? []).map((day: any) => {
+                  const daySlots = (serviceSlots.data ?? []).filter((slot: any) => slot.program_day_id === day.id);
+                  return (
+                    <div key={day.id} className="rounded-lg border p-3">
+                      <b>{formatDate(day.service_date)}</b>
+                      <p className="text-sm text-muted-foreground">
+                        {day.start_time || program.start_time || "—"} → {day.end_time || program.end_time || "—"}
+                      </p>
+                      {day.note ? <p className="mt-1 text-sm">{day.note}</p> : null}
+                      {daySlots.length ? <div className="mt-2 space-y-2">{daySlots.map((slot: any) => (
+                        <div key={slot.id} className="rounded-md bg-muted/60 p-2 text-sm">
+                          <b>{slot.label || "Créneau"}</b> · {slot.start_time || "—"} → {slot.end_time || "—"}
+                          {slot.required_count ? <span> · Besoin : {slot.required_count} personne(s)</span> : null}
+                        </div>
+                      ))}</div> : null}
+                    </div>
+                  );
+                }) : (serviceSlots.data ?? []).map((slot: any) => (
+                  <div key={slot.id} className="rounded-lg border p-3 text-sm">
+                    <b>{slot.label || "Créneau"}</b> · {formatDate(program.start_date)} · {slot.start_time || "—"} → {slot.end_time || "—"}
+                    {slot.required_count ? <span> · Besoin : {slot.required_count} personne(s)</span> : null}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
           {requiresResponse ? (
             <Card>
               <CardHeader>
