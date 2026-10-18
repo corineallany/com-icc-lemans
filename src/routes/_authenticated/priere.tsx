@@ -23,6 +23,24 @@ const CATEGORIES: Record<string, string> = {
   famille: "Famille", sante: "Santé", spirituel: "Vie spirituelle", autre: "Autre",
 };
 const today = () => new Date().toISOString().slice(0, 10);
+function escapeExportCell(value: unknown) {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function exportExcel(filename: string, sheets: { title: string; rows: unknown[][] }[]) {
+  const xml = '<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    sheets.map(sheet => '<Worksheet ss:Name="' + escapeExportCell(sheet.title.slice(0,31)) + '"><Table>' +
+      sheet.rows.map((row,i) => '<Row>' + row.map(cell => '<Cell' + (i===0 ? ' ss:StyleID="header"' : '') + '><Data ss:Type="String">' + escapeExportCell(cell) + '</Data></Cell>').join("") + '</Row>').join("") +
+      '</Table></Worksheet>').join("") + '</Workbook>';
+  const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename + ".xls"; a.click(); URL.revokeObjectURL(url);
+}
+function exportPdf(title: string, rows: { heading: string; entries: string[][] }[]) {
+  const body = rows.map(section => '<h2>' + escapeExportCell(section.heading) + '</h2><table><tr><th>Information</th><th>Détail</th></tr>' +
+    section.entries.map(entry => '<tr><td>' + escapeExportCell(entry[0]) + '</td><td>' + escapeExportCell(entry[1]).replace(/\n/g, '<br>') + '</td></tr>').join("") + '</table>').join("");
+  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + escapeExportCell(title) + '</title><style>body{font:12px Arial;margin:24px;color:#222}h1{color:#49336d}h2{margin-top:24px;border-bottom:1px solid #bbb}table{width:100%;border-collapse:collapse;margin:10px 0 18px}td,th{border:1px solid #ccc;padding:7px;text-align:left;vertical-align:top}th{background:#eee}@media print{body{margin:12mm}tr{break-inside:avoid}}</style></head><body><h1>' + escapeExportCell(title) + '</h1><p>Édité le ' + new Date().toLocaleString("fr-FR") + '</p>' + body + '<script>window.onload=function(){window.print()}</script></body></html>';
+  const win = window.open("", "_blank"); if (!win) { toast.error("Autorisez les fenêtres contextuelles pour exporter en PDF."); return; } win.document.write(html); win.document.close();
+}
+
 type SlotDraft = { date: string; start: string; end: string; conductors: string[]; attendanceManagers: string[] };
 function PrayerPage() {
   const { role, isTechAdmin, member } = useCurrentRole();
