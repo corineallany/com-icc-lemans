@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -195,8 +195,8 @@ function PrayerPage() {
   return (
     <AppShell title="Vie d’équipe" subtitle="Deux espaces distincts : COM’Frat et Prière.">
       <div className="mb-6 grid grid-cols-2 gap-3">
-        <a href="/com-icc-lemans/vie-equipe" className="flex min-h-16 items-center justify-center rounded-xl border-2 border-muted bg-background px-3 py-4 text-center font-bold hover:border-icc-violet">COM’Frat</a>
-        <a href="/com-icc-lemans/priere" aria-current="page" className="flex min-h-16 items-center justify-center rounded-xl border-2 border-icc-violet bg-icc-violet px-3 py-4 text-center font-bold text-white">Prière</a>
+        <Link to="/vie-equipe" className="flex min-h-16 items-center justify-center rounded-xl border-2 border-muted bg-background px-3 py-4 text-center font-bold hover:border-icc-violet">COM’Frat</Link>
+        <Link to="/priere" aria-current="page" className="flex min-h-16 items-center justify-center rounded-xl border-2 border-icc-violet bg-icc-violet px-3 py-4 text-center font-bold text-white">Prière</Link>
       </div>
       <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Button variant={prayerTab === "deposer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("deposer")}>Déposer un sujet</Button>
@@ -222,7 +222,7 @@ function PrayerPage() {
 
       {canManage ? <>
         <section id="programmes-priere" className="space-y-5">
-          <div><h2 className="text-xl font-black text-icc-violet">Programmes de prière</h2><p className="text-sm text-muted-foreground">Ces rencontres sont indépendantes du planning opérationnel.</p></div>
+          {prayerTab === "creer" ? <div><h2 className="text-xl font-black text-icc-violet">Programmes de prière</h2><p className="text-sm text-muted-foreground">Ces rencontres sont indépendantes du planning opérationnel.</p></div> : null}
           {prayerTab === "creer" ? <Card>
             <CardHeader><CardTitle>Créer un programme de prière</CardTitle></CardHeader>
             <CardContent className="space-y-4">
