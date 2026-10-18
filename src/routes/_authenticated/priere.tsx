@@ -1,0 +1,242 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
+import { AppShell, EmptyState } from "@/components/AppShell";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { useCurrentRole } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+
+export const Route = createFileRoute("/_authenticated/priere")({
+  head: () => ({ meta: [{ title: "Prière — COM ICC Le Mans" }] }),
+  component: PrayerPage,
+});
+const db = () => supabase as any;
+const CATEGORIES: Record<string, string> = {
+  personnel: "Vie personnelle", professionnel: "Vie professionnelle", vie_de_groupe: "Vie de groupe",
+  famille: "Famille", sante: "Santé", spirituel: "Vie spirituelle", autre: "Autre",
+};
+const today = () => new Date().toISOString().slice(0, 10);
+type SlotDraft = { date: string; start: string; end: string; conductors: string[] };
+function PrayerPage() {
+  const { role, isTechAdmin } = useCurrentRole();
+  const canManage = role === "responsable" || isTechAdmin;
+  const qc = useQueryClient();
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("autre");
+  const [description, setDescription] = useState("");
+  const [anonymous, setAnonymous] = useState(true);
+  const [displayName, setDisplayName] = useState("");
+  const [programTitle, setProgramTitle] = useState("");
+  const [programDescription, setProgramDescription] = useState("");
+  const [programDate, setProgramDate] = useState(today());
+  const [slots, setSlots] = useState<SlotDraft[]>([{ date: today(), start: "19:00", end: "20:00", conductors: [] }]);
+  const [selectedProgram, setSelectedProgram] = useState<any>(null);
+  const [selectedSlot, setSelectedSlot] = useState<any>(null);
+  const [attendanceDraft, setAttendanceDraft] = useState<Record<string, { status: string; reason: string; observation: string }>>({});
+
+  const subjects = useQuery({
+    queryKey: ["prayer-subjects"],
+    enabled: canManage,
+    queryFn: async () => {
+      const { data, error } = await db().from("prayer_subjects").select("*").order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const programs = useQuery({
+    queryKey: ["prayer-programs"],
+    enabled: canManage,
+    queryFn: async () => {
+      const { data, error } = await db().from("prayer_programs").select("*").order("program_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const members = useQuery({
+    queryKey: ["prayer-members"],
+    queryFn: async () => {
+      const { data, error } = await db().from("members").select("id,full_name,status,deleted").eq("deleted", false).order("full_name");
+      if (error) throw error;
+      return (data ?? []).filter((m: any) => m.status === "active" || m.status === "training" || !m.status);
+    },
+  });
+  const programSlots = useQuery({
+    queryKey: ["prayer-program-slots", selectedProgram?.id],
+    enabled: canManage && !!selectedProgram?.id,
+    queryFn: async () => {
+      const { data, error } = await db().from("prayer_program_slots").select("*").eq("program_id", selectedProgram.id).order("position");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const attendance = useQuery({
+    queryKey: ["prayer-attendance", selectedProgram?.id, selectedSlot?.id],
+    enabled: canManage && !!selectedSlot?.id,
+    queryFn: async () => {
+      const { data, error } = await db().from("prayer_program_attendance").select("*").eq("slot_id", selectedSlot.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const refresh = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["prayer-subjects"] }),
+      qc.invalidateQueries({ queryKey: ["prayer-programs"] }),
+      qc.invalidateQueries({ queryKey: ["prayer-program-slots"] }),
+      qc.invalidateQueries({ queryKey: ["prayer-attendance"] }),
+    ]);
+  };
+  const submitSubject = useMutation({
+    mutationFn: async () => {
+      if (!title.trim()) throw new Error("Ajoutez un titre au sujet de prière.");
+      if (!description.trim()) throw new Error("Décrivez le sujet pour aider l’équipe à prier.");
+      if (!anonymous && !displayName.trim()) throw new Error("Indiquez le nom à afficher ou cochez l’anonymat.");
+      const { error } = await db().from("prayer_subjects").insert({
+        title: title.trim(), category, description: description.trim(),
+        is_anonymous: anonymous, display_name: anonymous ? null : displayName.trim(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setTitle(""); setCategory("autre"); setDescription(""); setAnonymous(true); setDisplayName("");
+      toast.success("Sujet de prière déposé. Merci pour ta confiance.");
+      if (canManage) refresh();
+    },
+    onError: (e: any) => toast.error(e.message ?? "Impossible d’enregistrer le sujet."),
+  });
+  const createProgram = useMutation({
+    mutationFn: async () => {
+      if (!programTitle.trim()) throw new Error("Le thème du programme de prière est obligatoire.");
+      if (!programDate) throw new Error("Choisissez la date du programme.");
+      if (!slots.length || slots.some(s => !s.date || !s.start || !s.end || s.end <= s.start)) {
+        throw new Error("Chaque créneau doit avoir une date, une heure de début et une heure de fin valides.");
+      }
+      if (slots.some(s => s.conductors.length > 2)) throw new Error("Deux conducteurs maximum par créneau.");
+      const { data, error } = await db().from("prayer_programs").insert({
+        title: programTitle.trim(), description: programDescription.trim() || null, program_date: programDate,
+      }).select("id").single();
+      if (error) throw error;
+      const { error: slotError } = await db().from("prayer_program_slots").insert(
+        slots.map((s, i) => ({ program_id: data.id, slot_date: s.date, start_time: s.start, end_time: s.end, conductor_member_ids: s.conductors, position: i })),
+      );
+      if (slotError) throw slotError;
+      return data.id;
+    },
+    onSuccess: async (id: string) => {
+      setProgramTitle(""); setProgramDescription(""); setProgramDate(today());
+      setSlots([{ date: today(), start: "19:00", end: "20:00", conductors: [] }]);
+      await refresh();
+      const created = (await db().from("prayer_programs").select("*").eq("id", id).single()).data;
+      if (created) setSelectedProgram(created);
+      toast.success("Programme de prière créé.");
+    },
+    onError: (e: any) => toast.error(e.message ?? "Impossible de créer le programme."),
+  });
+  const saveAttendance = useMutation({
+    mutationFn: async () => {
+      if (!selectedSlot) throw new Error("Choisissez un créneau.");
+      const rows = (members.data ?? []).map((m: any) => {
+        const d = attendanceDraft[m.id] ?? (attendance.data ?? []).find((a: any) => a.member_id === m.id) ?? {};
+        if (!d.status) return null;
+        return {
+          slot_id: selectedSlot.id, member_id: m.id, attendance_status: d.status,
+          absence_reason: d.status === "absent" ? (d.reason?.trim() || null) : null,
+          observation: d.observation?.trim() || null,
+        };
+      }).filter(Boolean);
+      if (!rows.length) throw new Error("Renseignez au moins une présence.");
+      const { error } = await db().from("prayer_program_attendance").upsert(rows, { onConflict: "slot_id,member_id" });
+      if (error) throw error;
+    },
+    onSuccess: async () => { await refresh(); toast.success("Feuille de présence enregistrée."); },
+    onError: (e: any) => toast.error(e.message ?? "Impossible d’enregistrer les présences."),
+  });
+  const updateSubject = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await db().from("prayer_subjects").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: refresh,
+    onError: (e: any) => toast.error(e.message),
+  });
+  const memberName = new Map((members.data ?? []).map((m: any) => [m.id, m.full_name]));
+  const savedAttendance = attendance.data ?? [];
+  const statusOf = (memberId: string) => attendanceDraft[memberId]?.status ?? savedAttendance.find((a: any) => a.member_id === memberId)?.attendance_status ?? "";
+  const reasonOf = (memberId: string) => attendanceDraft[memberId]?.reason ?? savedAttendance.find((a: any) => a.member_id === memberId)?.absence_reason ?? "";
+  const observationOf = (memberId: string) => attendanceDraft[memberId]?.observation ?? savedAttendance.find((a: any) => a.member_id === memberId)?.observation ?? "";
+  const patchAttendance = (memberId: string, key: string, value: string) => setAttendanceDraft(prev => ({ ...prev, [memberId]: { status: prev[memberId]?.status ?? statusOf(memberId), reason: prev[memberId]?.reason ?? reasonOf(memberId), observation: prev[memberId]?.observation ?? observationOf(memberId), [key]: value } }));
+  return (
+    <AppShell title="Prière" subtitle="Sujets de prière confidentiels et rencontres de prière de la COM.">
+      <div className="mb-5 flex flex-wrap gap-2">
+        <a href="#deposer-sujet" className="rounded-lg bg-icc-violet px-4 py-2 text-sm font-semibold text-white">Déposer un sujet</a>
+        {canManage ? <a href="#programmes-priere" className="rounded-lg border px-4 py-2 text-sm font-semibold">Programmes de prière</a> : null}
+      </div>
+      <Card id="deposer-sujet" className="mb-6">
+        <CardHeader><CardTitle>Corbeille à sujets de prière</CardTitle><p className="text-sm text-muted-foreground">Le sujet est transmis à la responsable et à l’administrateur technique. Tu peux le déposer sans indiquer ton identité.</p></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Titre du sujet"><Input maxLength={180} value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex. : Orientation professionnelle" /></Field>
+            <Field label="Thème"><select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={category} onChange={e => setCategory(e.target.value)}>{Object.entries(CATEGORIES).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+          </div>
+          <Field label="Description du sujet"><Textarea rows={6} value={description} onChange={e => setDescription(e.target.value)} placeholder="Décris ce pour quoi tu aimerais que nous priions, avec les détails que tu souhaites partager." /></Field>
+          <div className="rounded-lg border p-3">
+            <label className="flex items-start gap-3 text-sm"><input type="checkbox" checked={anonymous} onChange={e => { setAnonymous(e.target.checked); if (e.target.checked) setDisplayName(""); }} className="mt-1" /><span><b>Déposer anonymement</b><span className="mt-1 block text-muted-foreground">Aucun nom ni identifiant de compte ne sera enregistré dans le sujet. La responsable verra le contenu, mais pas l’identité de l’auteur à partir de cet enregistrement.</span></span></label>
+            {!anonymous ? <div className="mt-3"><Field label="Nom à afficher"><Input value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Prénom et nom" /></Field></div> : null}
+          </div>
+          <Button onClick={() => submitSubject.mutate()} disabled={submitSubject.isPending}>{submitSubject.isPending ? "Enregistrement…" : "Déposer le sujet de prière"}</Button>
+        </CardContent>
+      </Card>
+
+      {canManage ? <>
+        <section id="programmes-priere" className="space-y-5">
+          <div><h2 className="text-xl font-black text-icc-violet">Programmes de prière</h2><p className="text-sm text-muted-foreground">Ces rencontres sont indépendantes du planning opérationnel.</p></div>
+          <Card>
+            <CardHeader><CardTitle>Créer un programme de prière</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <Field label="Thème / titre"><Input value={programTitle} onChange={e => setProgramTitle(e.target.value)} placeholder="Ex. : Prière pour la COM et les projets à venir" /></Field>
+              <Field label="Description détaillée (facultative)"><Textarea rows={5} value={programDescription} onChange={e => setProgramDescription(e.target.value)} placeholder="Intentions, objectifs et déroulé souhaité…" /></Field>
+              <Field label="Date de référence"><Input type="date" value={programDate} onChange={e => setProgramDate(e.target.value)} /></Field>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Créneaux et conducteurs</h3><Button type="button" variant="outline" size="sm" onClick={() => setSlots(s => [...s, { date: programDate || today(), start: "19:00", end: "20:00", conductors: [] }])}>+ Ajouter un créneau</Button></div>
+                {slots.map((s, i) => <div key={i} className="space-y-3 rounded-xl border p-3">
+                  <div className="flex items-center justify-between"><b>Créneau {i + 1}</b>{slots.length > 1 ? <Button variant="ghost" size="sm" onClick={() => setSlots(x => x.filter((_, j) => j !== i))}>Retirer</Button> : null}</div>
+                  <div className="grid gap-3 sm:grid-cols-3"><Field label="Date"><Input type="date" value={s.date} onChange={e => setSlots(x => x.map((z,j) => j===i ? {...z,date:e.target.value}:z))}/></Field><Field label="Heure de début"><Input type="time" value={s.start} onChange={e => setSlots(x => x.map((z,j) => j===i ? {...z,start:e.target.value}:z))}/></Field><Field label="Heure de fin"><Input type="time" value={s.end} onChange={e => setSlots(x => x.map((z,j) => j===i ? {...z,end:e.target.value}:z))}/></Field></div>
+                  <p className="text-sm font-semibold">Conducteurs (maximum 2, toute la COM)</p>
+                  <div className="grid gap-2 sm:grid-cols-2">{(members.data ?? []).map((m:any) => <label key={m.id} className="flex items-center gap-2 rounded-md border p-2 text-sm"><input type="checkbox" checked={s.conductors.includes(m.id)} disabled={!s.conductors.includes(m.id) && s.conductors.length >= 2} onChange={e => setSlots(x => x.map((z,j) => j!==i ? z : {...z,conductors:e.target.checked ? [...z.conductors,m.id] : z.conductors.filter(id => id!==m.id)}))}/>{m.full_name}</label>)}</div>
+                </div>)}
+              </div>
+              <Button onClick={() => createProgram.mutate()} disabled={createProgram.isPending}>{createProgram.isPending ? "Création…" : "Enregistrer le programme de prière"}</Button>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card><CardHeader><CardTitle>Sujets déposés ({(subjects.data ?? []).length})</CardTitle></CardHeader><CardContent className="space-y-3">
+              {subjects.isLoading ? <p className="text-sm text-muted-foreground">Chargement…</p> : (subjects.data ?? []).length ? (subjects.data ?? []).map((s:any) => <article key={s.id} className="rounded-xl border p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><Badge>{CATEGORIES[s.category] ?? "Autre"}</Badge><h3 className="mt-2 font-bold">{s.title}</h3><p className="text-xs text-muted-foreground">{s.is_anonymous ? "Anonyme" : s.display_name} · {new Date(s.created_at).toLocaleDateString("fr-FR")}</p></div><select aria-label="Statut du sujet" className="h-9 rounded-md border bg-background px-2 text-sm" value={s.status} onChange={e => updateSubject.mutate({id:s.id,status:e.target.value})}><option value="a_prier">À prier</option><option value="en_priere">En prière</option><option value="prie">Sujet prié</option></select></div><p className="mt-3 whitespace-pre-wrap text-sm">{s.description}</p></article>) : <EmptyState title="Aucun sujet pour le moment"/>}
+            </CardContent></Card>
+            <Card><CardHeader><CardTitle>Rencontres enregistrées ({(programs.data ?? []).length})</CardTitle></CardHeader><CardContent className="space-y-2">
+              {(programs.data ?? []).length ? (programs.data ?? []).map((p:any) => <button key={p.id} onClick={() => {setSelectedProgram(p);setSelectedSlot(null);setAttendanceDraft({});}} className={"w-full rounded-lg border p-3 text-left "+(selectedProgram?.id===p.id?"border-icc-violet bg-icc-violet/5":"")}><b>{p.title}</b><span className="block text-sm text-muted-foreground">{new Date(p.program_date+"T12:00:00").toLocaleDateString("fr-FR")} · {p.status==="termine"?"Terminé":p.status==="annule"?"Annulé":"Planifié"}</span>{p.description ? <span className="mt-1 block text-sm">{p.description}</span> : null}</button>) : <EmptyState title="Aucun programme de prière créé"/>}
+            </CardContent></Card>
+          </div>
+          {selectedProgram ? <Card><CardHeader><CardTitle>Feuille de présence — {selectedProgram.title}</CardTitle><p className="text-sm text-muted-foreground">Choisissez un créneau, puis renseignez les présences. Cette feuille est accessible à la responsable et à l’administrateur technique.</p></CardHeader><CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">{(programSlots.data ?? []).map((s:any) => <Button key={s.id} variant={selectedSlot?.id===s.id?"default":"outline"} size="sm" onClick={() => {setSelectedSlot(s);setAttendanceDraft({});}}>{new Date(s.slot_date+"T12:00:00").toLocaleDateString("fr-FR")} · {s.start_time}–{s.end_time}</Button>)}</div>
+            {selectedSlot ? <>
+              <div className="rounded-lg bg-muted p-3 text-sm"><b>Conducteurs :</b> {(selectedSlot.conductor_member_ids ?? []).map((id:string) => memberName.get(id) ?? id).join(", ") || "À définir"}</div>
+              <div className="grid gap-3">{(members.data ?? []).map((m:any) => <div key={m.id} className="rounded-lg border p-3"><div className="font-semibold">{m.full_name}</div><div className="mt-2 grid gap-2 sm:grid-cols-3"><Field label="Présence"><select className="h-9 w-full rounded-md border bg-background px-2 text-sm" value={statusOf(m.id)} onChange={e => patchAttendance(m.id,"status",e.target.value)}><option value="">À renseigner</option><option value="present">Présent(e)</option><option value="absent">Absent(e)</option><option value="partiel">Présence partielle</option></select></Field>{statusOf(m.id)==="absent" ? <Field label="Motif d’absence"><Input value={reasonOf(m.id)} onChange={e => patchAttendance(m.id,"reason",e.target.value)} placeholder="Motif, si communiqué"/></Field> : null}<Field label="Observation"><Input value={observationOf(m.id)} onChange={e => patchAttendance(m.id,"observation",e.target.value)} placeholder="Ex. : arrivé(e) à mi-parcours"/></Field></div></div>)}</div>
+              <Button onClick={() => saveAttendance.mutate()} disabled={saveAttendance.isPending}>{saveAttendance.isPending?"Enregistrement…":"Enregistrer les présences et le rapport"}</Button>
+              <div className="rounded-xl border p-3"><h3 className="font-bold">Synthèse du créneau</h3><p className="mt-1 text-sm">Présents : {savedAttendance.filter((a:any)=>a.attendance_status==="present").length} · Absents : {savedAttendance.filter((a:any)=>a.attendance_status==="absent").length} · Présences partielles : {savedAttendance.filter((a:any)=>a.attendance_status==="partiel").length}</p>{savedAttendance.filter((a:any)=>a.attendance_status==="absent"&&a.absence_reason).map((a:any)=><p key={a.id} className="mt-1 text-sm">{memberName.get(a.member_id)} — motif : {a.absence_reason}</p>)}{savedAttendance.filter((a:any)=>a.observation).map((a:any)=><p key={a.id} className="mt-1 text-sm">{memberName.get(a.member_id)} — {a.observation}</p>)}</div>
+            </> : <EmptyState title="Sélectionnez un créneau"/>}
+          </CardContent></Card> : null}
+        </section>
+      </> : <p className="mt-4 text-xs text-muted-foreground">La gestion des sujets déposés et des programmes de prière est réservée à la responsable et à l’administrateur technique.</p>}
+    </AppShell>
+  );
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="min-w-0 space-y-1"><Label>{label}</Label>{children}</div>;
+}
