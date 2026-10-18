@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -237,6 +238,6 @@ function PrayerPage() {
     </AppShell>
   );
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return <div className="min-w-0 space-y-1"><Label>{label}</Label>{children}</div>;
 }
