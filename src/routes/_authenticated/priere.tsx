@@ -23,9 +23,9 @@ const CATEGORIES: Record<string, string> = {
   famille: "Famille", sante: "Santé", spirituel: "Vie spirituelle", autre: "Autre",
 };
 const today = () => new Date().toISOString().slice(0, 10);
-type SlotDraft = { date: string; start: string; end: string; conductors: string[] };
+type SlotDraft = { date: string; start: string; end: string; conductors: string[]; attendanceManagers: string[] };
 function PrayerPage() {
-  const { role, isTechAdmin } = useCurrentRole();
+  const { role, isTechAdmin, member } = useCurrentRole();
   const canManage = role === "responsable" || isTechAdmin;
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
@@ -36,7 +36,7 @@ function PrayerPage() {
   const [programTitle, setProgramTitle] = useState("");
   const [programDescription, setProgramDescription] = useState("");
   const [programDate, setProgramDate] = useState(today());
-  const [slots, setSlots] = useState<SlotDraft[]>([{ date: today(), start: "19:00", end: "20:00", conductors: [] }]);
+  const [slots, setSlots] = useState<SlotDraft[]>([{ date: today(), start: "19:00", end: "20:00", conductors: [], attendanceManagers: [] }]);
   const [selectedProgram, setSelectedProgram] = useState<any>(null);
   const [selectedSlot, setSelectedSlot] = useState<any>(null);
   const [attendanceDraft, setAttendanceDraft] = useState<Record<string, { status: string; reason: string; observation: string }>>({});
@@ -52,7 +52,7 @@ function PrayerPage() {
   });
   const programs = useQuery({
     queryKey: ["prayer-programs"],
-    enabled: canManage,
+    enabled: !!member?.id,
     queryFn: async () => {
       const { data, error } = await db().from("prayer_programs").select("*").order("program_date", { ascending: false });
       if (error) throw error;
@@ -69,7 +69,7 @@ function PrayerPage() {
   });
   const programSlots = useQuery({
     queryKey: ["prayer-program-slots", selectedProgram?.id],
-    enabled: canManage && !!selectedProgram?.id,
+    enabled: !!selectedProgram?.id,
     queryFn: async () => {
       const { data, error } = await db().from("prayer_program_slots").select("*").eq("program_id", selectedProgram.id).order("position");
       if (error) throw error;
@@ -78,7 +78,7 @@ function PrayerPage() {
   });
   const attendance = useQuery({
     queryKey: ["prayer-attendance", selectedProgram?.id, selectedSlot?.id],
-    enabled: canManage && !!selectedSlot?.id,
+    enabled: !!selectedSlot?.id,
     queryFn: async () => {
       const { data, error } = await db().from("prayer_program_attendance").select("*").eq("slot_id", selectedSlot.id);
       if (error) throw error;
@@ -124,14 +124,14 @@ function PrayerPage() {
       }).select("id").single();
       if (error) throw error;
       const { error: slotError } = await db().from("prayer_program_slots").insert(
-        slots.map((s, i) => ({ program_id: data.id, slot_date: s.date, start_time: s.start, end_time: s.end, conductor_member_ids: s.conductors, position: i })),
+        slots.map((s, i) => ({ program_id: data.id, slot_date: s.date, start_time: s.start, end_time: s.end, conductor_member_ids: s.conductors, attendance_manager_member_ids: s.attendanceManagers, position: i })),
       );
       if (slotError) throw slotError;
       return data.id;
     },
     onSuccess: async (id: string) => {
       setProgramTitle(""); setProgramDescription(""); setProgramDate(today());
-      setSlots([{ date: today(), start: "19:00", end: "20:00", conductors: [] }]);
+      setSlots([{ date: today(), start: "19:00", end: "20:00", conductors: [], attendanceManagers: [] }]);
       await refresh();
       const created = (await db().from("prayer_programs").select("*").eq("id", id).single()).data;
       if (created) setSelectedProgram(created);
@@ -142,6 +142,7 @@ function PrayerPage() {
   const saveAttendance = useMutation({
     mutationFn: async () => {
       if (!selectedSlot) throw new Error("Choisissez un créneau.");
+      if (!canManage && !(selectedSlot.attendance_manager_member_ids ?? []).includes(member?.id)) throw new Error("Vous n’êtes pas désigné(e) pour renseigner les présences de ce créneau.");
       const rows = (members.data ?? []).map((m: any) => {
         const d = attendanceDraft[m.id] ?? (attendance.data ?? []).find((a: any) => a.member_id === m.id) ?? {};
         if (!d.status) return null;
@@ -204,13 +205,14 @@ function PrayerPage() {
               <Field label="Description détaillée (facultative)"><Textarea rows={5} value={programDescription} onChange={e => setProgramDescription(e.target.value)} placeholder="Intentions, objectifs et déroulé souhaité…" /></Field>
               <Field label="Date de référence"><Input type="date" value={programDate} onChange={e => setProgramDate(e.target.value)} /></Field>
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Créneaux et conducteurs</h3><Button type="button" variant="outline" size="sm" onClick={() => setSlots(s => [...s, { date: programDate || today(), start: "19:00", end: "20:00", conductors: [] }])}>+ Ajouter un créneau</Button></div>
+                <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Créneaux et conducteurs</h3><Button type="button" variant="outline" size="sm" onClick={() => setSlots(s => [...s, { date: programDate || today(), start: "19:00", end: "20:00", conductors: [], attendanceManagers: [] }])}>+ Ajouter un créneau</Button></div>
                 {slots.map((s, i) => <div key={i} className="space-y-3 rounded-xl border p-3">
                   <div className="flex items-center justify-between"><b>Créneau {i + 1}</b>{slots.length > 1 ? <Button variant="ghost" size="sm" onClick={() => setSlots(x => x.filter((_, j) => j !== i))}>Retirer</Button> : null}</div>
                   <div className="grid gap-3 sm:grid-cols-3"><Field label="Date"><Input type="date" value={s.date} onChange={e => setSlots(x => x.map((z,j) => j===i ? {...z,date:e.target.value}:z))}/></Field><Field label="Heure de début"><Input type="time" value={s.start} onChange={e => setSlots(x => x.map((z,j) => j===i ? {...z,start:e.target.value}:z))}/></Field><Field label="Heure de fin"><Input type="time" value={s.end} onChange={e => setSlots(x => x.map((z,j) => j===i ? {...z,end:e.target.value}:z))}/></Field></div>
                   <p className="text-sm font-semibold">Conducteurs (maximum 2, toute la COM)</p>
                   <div className="grid gap-2 sm:grid-cols-2">{(members.data ?? []).map((m:any) => <label key={m.id} className="flex items-center gap-2 rounded-md border p-2 text-sm"><input type="checkbox" checked={s.conductors.includes(m.id)} disabled={!s.conductors.includes(m.id) && s.conductors.length >= 2} onChange={e => setSlots(x => x.map((z,j) => j!==i ? z : {...z,conductors:e.target.checked ? [...z.conductors,m.id] : z.conductors.filter(id => id!==m.id)}))}/>{m.full_name}</label>)}</div>
                 </div>)}
+                <div className="rounded-lg bg-muted/50 p-3"><p className="mb-2 text-sm font-semibold">Personne(s) autorisée(s) à saisir les présences (sans accès aux sujets de prière)</p><div className="grid gap-2 sm:grid-cols-2">{(members.data ?? []).map((m:any) => <label key={m.id} className="flex items-center gap-2 rounded-md border bg-background p-2 text-sm"><input type="checkbox" checked={s.attendanceManagers.includes(m.id)} onChange={e => setSlots(x => x.map((z,j) => j!==i ? z : {...z,attendanceManagers:e.target.checked ? [...z.attendanceManagers,m.id] : z.attendanceManagers.filter(id => id!==m.id)}))}/>{m.full_name}</label>)}</div></div>
               </div>
               <Button onClick={() => createProgram.mutate()} disabled={createProgram.isPending}>{createProgram.isPending ? "Création…" : "Enregistrer le programme de prière"}</Button>
             </CardContent>
