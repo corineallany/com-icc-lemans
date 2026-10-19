@@ -47,8 +47,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const { member, isStaff } = useCurrentRole();
   const qc = useQueryClient();
   const [note, setNote] = useState<Record<string, string>>({});
-  const [direct, setDirect] = useState<Record<string, string>>({});
-  const [solicit, setSolicit] = useState<Record<string, string>>({});
+  const [direct, setDirect] = useState<Record<string, string[]>>({});
+  const [solicit, setSolicit] = useState<Record<string, string[]>>({});
   const [requestDraft, setRequestDraft] = useState<{
     assignmentId: string;
     nature: "reinforcement" | "replacement";
@@ -722,25 +722,16 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                   <p className="mb-2 text-xs text-muted-foreground">
                     Membre du pôle uniquement. Participation immédiate, aucune réponse demandée.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    <select
-                      className="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-                      value={direct[a.id] ?? ""}
-                      onChange={(e) => setDirect((v) => ({ ...v, [a.id]: e.target.value }))}
-                    >
-                      <option value="">Choisir un membre du pôle…</option>
-                      {directCandidates.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.full_name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      size="sm"
-                      disabled={!direct[a.id]}
-                      onClick={() => assign.mutate({ aid: a.id, mid: direct[a.id] })}
-                    >
-                      Affecter sans réponse
+                  <div className="space-y-2">
+                    <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
+                      {directCandidates.map((m) => <label key={m.id} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={(direct[a.id] ?? []).includes(m.id)} onChange={(e) => setDirect((v) => ({ ...v, [a.id]: e.target.checked ? [...(v[a.id] ?? []), m.id] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
+                        {m.full_name}
+                      </label>)}
+                      {!directCandidates.length ? <p className="text-xs text-muted-foreground">Aucun membre disponible dans ce pôle.</p> : null}
+                    </div>
+                    <Button size="sm" disabled={!(direct[a.id] ?? []).length} onClick={() => (direct[a.id] ?? []).forEach((mid) => assign.mutate({ aid: a.id, mid }))}>
+                      Affecter les { (direct[a.id] ?? []).length || "" } membre(s) sélectionné(s) sans réponse
                     </Button>
                   </div>
                 </div>
@@ -751,28 +742,16 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                     Demande liée à ce programme et à ce besoin. Le membre doit répondre. Un renfort
                     d’un autre pôle est possible ici.
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    <select
-                      className="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
-                      value={solicit[a.id] ?? ""}
-                      onChange={(e) => setSolicit((v) => ({ ...v, [a.id]: e.target.value }))}
-                    >
-                      <option value="">Choisir un membre à solliciter…</option>
-                      {solicitationCandidates.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.full_name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={!solicit[a.id]}
-                      onClick={() =>
-                        solicitProgram.mutate({ aid: a.id, mid: solicit[a.id] })
-                      }
-                    >
-                      Envoyer la sollicitation
+                  <div className="space-y-2">
+                    <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
+                      {solicitationCandidates.map((m) => <label key={m.id} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={(solicit[a.id] ?? []).includes(m.id)} onChange={(e) => setSolicit((v) => ({ ...v, [a.id]: e.target.checked ? [...(v[a.id] ?? []), m.id] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
+                        {m.full_name}
+                      </label>)}
+                      {!solicitationCandidates.length ? <p className="text-xs text-muted-foreground">Aucun autre membre disponible à solliciter.</p> : null}
+                    </div>
+                    <Button size="sm" variant="outline" disabled={!(solicit[a.id] ?? []).length} onClick={() => (solicit[a.id] ?? []).forEach((mid) => solicitProgram.mutate({ aid: a.id, mid }))}>
+                      Solliciter les { (solicit[a.id] ?? []).length || "" } membre(s) sélectionné(s)
                     </Button>
                   </div>
                 </div>
