@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { ProgramFullExport } from "@/components/programs/ProgramFullExport";
 import { ProgramParticipationPanel } from "@/components/programs/ProgramParticipationPanel";
-import { ProgramStaffingSummary } from "@/components/programs/ProgramStaffingSummary";
 import { CopyProgramLinkButton } from "@/components/programs/CopyProgramLinkButton";
 import { useCurrentRole } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
