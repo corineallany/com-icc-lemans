@@ -788,7 +788,7 @@ function Sollicitations() {
         })
         .filter(Boolean);
       if (rows.length) {
-        await (supabase as any)
+        const { error: clearSlotError } = await (supabase as any)
           .from("program_assignment_member_slots")
           .delete()
           .in("service_slot_id", chosenIds)
@@ -796,11 +796,12 @@ function Sollicitations() {
             "assignment_member_id",
             (amRes.data ?? []).map((x: any) => x.id),
           );
+        if (clearSlotError) throw clearSlotError;
         const ins = await (supabase as any).from("program_assignment_member_slots").insert(rows);
         if (ins.error) throw ins.error;
       }
     }
-    await (supabase as any).from("program_member_responses").upsert(
+    const { error: responseError } = await (supabase as any).from("program_member_responses").upsert(
       {
         id: `${s.program_id}__${memberId}`,
         program_id: s.program_id,
@@ -810,6 +811,7 @@ function Sollicitations() {
       },
       { onConflict: "program_id,member_id" },
     );
+    if (responseError) throw responseError;
   }
 
   const selectRecipient = useMutation({
@@ -873,6 +875,7 @@ function Sollicitations() {
       setDetail(null);
       await refresh();
     },
+    onError: (e: Error) => toast.error(e.message || "Impossible d’annuler la demande."),
   });
   const archive = useMutation({
     mutationFn: async (s: any) => {
@@ -883,9 +886,11 @@ function Sollicitations() {
       if (error) throw error;
     },
     onSuccess: async () => {
+      toast.success("Demande archivée");
       setDetail(null);
       await refresh();
     },
+    onError: (e: Error) => toast.error(e.message || "Impossible d’archiver la demande."),
   });
 
   async function refresh() {
