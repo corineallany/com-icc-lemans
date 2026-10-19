@@ -206,14 +206,20 @@ function ProgramSheet() {
         actorName: member.full_name,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setEditor(null);
       setResponseNote("");
-      qc.invalidateQueries({ queryKey: ["program-responses", id] });
-      qc.invalidateQueries({ queryKey: ["program-sheet-participation-modes", id] });
-      qc.invalidateQueries({ queryKey: ["program-assignment-modes", id] });
-      qc.invalidateQueries({ queryKey: ["programs"] });
-      toast.success("Réponse enregistrée");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["program-responses", id] }),
+        qc.invalidateQueries({ queryKey: ["program-sheet-participation-modes", id] }),
+        qc.invalidateQueries({ queryKey: ["program-assignment-modes", id] }),
+        qc.invalidateQueries({ queryKey: ["programs"] }),
+        qc.invalidateQueries({ queryKey: ["program-staffing-needs", id] }),
+      ]);
+      toast.success("Réponse enregistrée et actualisée");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Impossible d’enregistrer ta réponse. Réessaie.");
     },
   });
   const setTeamLocation = useMutation({
@@ -572,6 +578,7 @@ function ProgramSheet() {
                       key={s}
                       size="sm"
                       variant={mine?.status === s ? "default" : "outline"}
+                      disabled={respond.isPending}
                       onClick={() =>
                         s === "available" ? respond.mutate({ status: s }) : setEditor(s)
                       }
