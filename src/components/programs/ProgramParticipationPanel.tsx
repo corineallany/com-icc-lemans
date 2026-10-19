@@ -745,7 +745,11 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       });
       if (error) throw error;
     },
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh();
+      toast.success("Proposition retirée");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible de retirer la proposition."),
   });
 
   return (
