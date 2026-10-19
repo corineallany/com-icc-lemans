@@ -503,10 +503,16 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     const program = programInfo.data;
     const initialDeadline = deadlineForSlot(slotId) || slot?.response_deadline_at || program?.response_deadline_at || "";
     const deadlineLocal = initialDeadline ? new Date(initialDeadline).toISOString().slice(0, 16) : "";
-    setRequestPoleId(assignments.find((a) => a.id === assignmentId)?.pole_id ?? "");
+    const assignment = assignments.find((a) => a.id === assignmentId);
+    const need = slotId ? (slotNeeds.data ?? []).find((n: any) => n.assignment_id === assignmentId && n.service_slot_id === slotId) : null;
+    const currentRows = (modes.data ?? []).filter((x: any) => x.assignment_id === assignmentId && ["direct", "proposal"].includes(x.assignment_mode) && !["covered", "withdrawn", "refused"].includes(x.process_status));
+    const uncovered = need
+      ? Math.max(1, Number(need.required_count) - coveredCountForNeed(need, slotId))
+      : Math.max(1, Number(assignment?.required_count ?? 1) - currentRows.length);
+    setRequestPoleId(assignment?.pole_id ?? "");
     setRequestDraft({
       assignmentId, nature, slotId, memberIds: [], mission: "",
-      count: "1", deadlineAt: deadlineLocal, replacementMemberId,
+      count: String(nature === "replacement" ? 1 : uncovered), deadlineAt: deadlineLocal, replacementMemberId,
     });
   };
 
