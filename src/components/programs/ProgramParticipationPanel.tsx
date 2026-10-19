@@ -336,7 +336,10 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const canChooseSlots =
     !!member?.id &&
     (modes.data ?? []).some(
-      (x: any) => x.member_id === member.id && x.process_status !== "covered",
+      (x: any) =>
+        x.member_id === member.id &&
+        x.assignment_mode === "solicited" &&
+        x.process_status !== "covered",
     );
 
   const refresh = () => {
@@ -485,10 +488,32 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const saveParticipationMode = useMutation({
     mutationFn: async (mode: "organizer" | "member") => {
       if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
-      const { error } = await (supabase as any)
-        .from("programs")
-        .update({ slot_selection_mode: mode })
-        .eq("id", programId);
+      const db = supabase as any;
+      if (mode === "member") {
+        // In global mode, a solicitation expresses a need for availability,
+        // not a pre-assignment to every slot. Remove only slot links attached
+        // to pending solicited participants; keep confirmed/direct assignments.
+        const { data: assignmentIds, error: assignmentsError } = await db
+          .from("program_assignments").select("id").eq("program_id", programId);
+        if (assignmentsError) throw assignmentsError;
+        const ids = (assignmentIds ?? []).map((x: any) => x.id);
+        if (ids.length) {
+          const { data: solicitedRows, error: rowsError } = await db
+            .from("program_assignment_members")
+            .select("id,assignment_mode,process_status")
+            .in("assignment_id", ids)
+            .eq("assignment_mode", "solicited")
+            .neq("process_status", "covered");
+          if (rowsError) throw rowsError;
+          const participantIds = (solicitedRows ?? []).map((x: any) => x.id);
+          if (participantIds.length) {
+            const { error: linksError } = await db
+              .from("program_assignment_member_slots").delete().in("assignment_member_id", participantIds);
+            if (linksError) throw linksError;
+          }
+        }
+      }
+      const { error } = await db.from("programs").update({ slot_selection_mode: mode }).eq("id", programId);
       if (error) throw error;
     },
     onSuccess: async () => {
