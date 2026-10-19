@@ -34,6 +34,11 @@ type Props = {
 
 const stamp = (v: string) =>
   new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(v));
+const toLocalDateTimeInput = (value: string) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
 const proposalLabel: Record<string, string> = {
   pending: "En attente",
@@ -502,7 +507,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     const slot = (serviceSlots.data ?? []).find((s: any) => s.id === slotId);
     const program = programInfo.data;
     const initialDeadline = deadlineForSlot(slotId) || slot?.response_deadline_at || program?.response_deadline_at || "";
-    const deadlineLocal = initialDeadline ? new Date(initialDeadline).toISOString().slice(0, 16) : "";
+    const deadlineLocal = initialDeadline ? toLocalDateTimeInput(initialDeadline) : "";
     const assignment = assignments.find((a) => a.id === assignmentId);
     const need = slotId ? (slotNeeds.data ?? []).find((n: any) => n.assignment_id === assignmentId && n.service_slot_id === slotId) : null;
     const currentRows = (modes.data ?? []).filter((x: any) => x.assignment_id === assignmentId && ["direct", "proposal"].includes(x.assignment_mode) && !["covered", "withdrawn", "refused"].includes(x.process_status));
@@ -839,7 +844,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                   <select className="h-10 w-full rounded-md border bg-background px-3" value={requestDraft.slotId} onChange={(e) => {
                     const slot = (serviceSlots.data ?? []).find((s: any) => s.id === e.target.value);
                     const deadline = deadlineForSlot(e.target.value) || slot?.response_deadline_at || programInfo.data?.response_deadline_at || "";
-                    setRequestDraft({ ...requestDraft, slotId: e.target.value, deadlineAt: deadline ? new Date(deadline).toISOString().slice(0,16) : requestDraft.deadlineAt });
+                    setRequestDraft({ ...requestDraft, slotId: e.target.value, deadlineAt: deadline ? toLocalDateTimeInput(deadline) : requestDraft.deadlineAt });
                   }}>
                     <option value="">Tout le programme / aucun créneau précis</option>
                     {(serviceSlots.data ?? []).map((s: any) => <option key={s.id} value={s.id}>{s.service_date ? new Date(`${s.service_date}T12:00:00`).toLocaleDateString("fr-FR") : ""} · {s.label || `${s.start_time}–${s.end_time}`}</option>)}
