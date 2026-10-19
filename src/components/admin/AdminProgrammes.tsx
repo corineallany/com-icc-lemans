@@ -367,6 +367,8 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         throw new Error("Le délai doit être un nombre entier positif d’heures ou de jours.");
       if (deadlineOffset !== null && v.response_deadline_anchor === "slot" && !v.detailed_scheduling)
         throw new Error("Pour calculer l’échéance avant chaque créneau, active les créneaux de service.");
+      if (v.serviceSlots.some((slot) => slot.deadline_override && (!Number.isInteger(Number(slot.response_deadline_offset_value)) || Number(slot.response_deadline_offset_value) < 1)))
+        throw new Error("Chaque délai personnalisé doit contenir un nombre entier positif d’heures ou de jours.");
       if (v.detailed_scheduling && !v.serviceSlots.length)
         throw new Error("Ajoute au moins un créneau de service.");
       if (
