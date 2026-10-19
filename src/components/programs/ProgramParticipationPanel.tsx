@@ -519,6 +519,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["program-slot-config", programId] });
       await qc.invalidateQueries({ queryKey: ["program-member-slot-chooser", programId] });
+      refresh();
       toast.success("Mode de mobilisation mis à jour.");
     },
     onError: (e: any) => toast.error(e.message || "Impossible de modifier le mode de mobilisation."),
@@ -907,6 +908,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           canChoose={canChooseSlots}
           isStaff={isStaff}
           members={members}
+          poles={poles}
         />
       ) : null}
 
@@ -1150,6 +1152,11 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                   onChange={(e) => setNote((v) => ({ ...v, [a.id]: e.target.value }))}
                 />
                 <Button onClick={() => propose.mutate(a.id)}>🙋 Je me propose</Button>
+                {solicited.some((x: any) => x.process_status !== "covered") ? (
+                  <p className="text-xs text-muted-foreground sm:self-center">
+                    Des personnes ont déjà été sollicitées pour ce pôle. Leurs réponses seront examinées en priorité. Ta proposition restera en attente de validation et ne vaut pas affectation.
+                  </p>
+                ) : null}
               </div>
             ) : null}
 
