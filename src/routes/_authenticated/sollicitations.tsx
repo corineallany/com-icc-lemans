@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -224,6 +224,12 @@ function Sollicitations() {
   const slotLabel = (s: ServiceSlot) =>
     `${s.service_date ? formatDate(s.service_date) + " · " : ""}${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)}${s.label ? ` · ${s.label}` : ""}`;
 
+  useEffect(() => {
+    const solicitationId = new URLSearchParams(window.location.search).get("solicitationId");
+    if (!solicitationId || !solicitations.data?.length) return;
+    const target = solicitations.data.find((item: any) => item.id === solicitationId);
+    if (target) setDetail(target);
+  }, [solicitations.data]);
   const rows = useMemo(() => {
     let data = (solicitations.data ?? []).filter((s: any) => !s.archived);
     const needle = search.trim().toLowerCase();
