@@ -661,8 +661,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">{programInfo.data.response_deadline_at ? `Échéance calculée actuellement : ${new Date(programInfo.data.response_deadline_at).toLocaleString("fr-FR")}` : "Aucun délai général enregistré."}</p>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" disabled={saveGlobalDeadline.isPending} onClick={() => { setGlobalDeadlineValue(""); saveGlobalDeadline.mutate(); }}>Supprimer le délai général</Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Laisse le nombre vide pour supprimer le délai général.</span>
               <Button size="sm" disabled={saveGlobalDeadline.isPending} onClick={() => saveGlobalDeadline.mutate()}>{saveGlobalDeadline.isPending ? "Enregistrement…" : "Enregistrer le délai général"}</Button>
             </div>
           </div>
