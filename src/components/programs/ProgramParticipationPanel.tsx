@@ -129,8 +129,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   });
 
   const slotNeeds = useQuery({
-    queryKey: ["program-staffing-needs", programId, assignments.map((a) => a.id).sort().join(",")],
-    enabled: assignments.length > 0,
+    queryKey: ["program-staffing-needs", programId, assignments.map((a) => a.id).sort().join(","), (serviceSlots.data ?? []).map((s: any) => s.id).sort().join(",")],
+    enabled: assignments.length > 0 && !serviceSlots.isLoading,
     queryFn: async () => {
       const slotIds = (serviceSlots.data ?? []).map((s: any) => s.id);
       if (!slotIds.length) return [];
