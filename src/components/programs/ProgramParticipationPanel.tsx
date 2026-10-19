@@ -876,6 +876,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
             !m.deleted &&
             !m.archived &&
             !confirmedIds.has(m.id) &&
+            !activeRowIds.has(m.id) &&
             membershipKeys.has(`${a.pole_id}::${m.id}`),
         );
 
