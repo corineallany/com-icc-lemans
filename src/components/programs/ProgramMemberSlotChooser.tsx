@@ -99,6 +99,14 @@ export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isSta
       const existing = data.data.participation.find((p: any) => p.assignment_id === assignmentId && p.member_id === choice.member_id);
       let assignmentMemberId = existing?.id;
       if (existing?.assignment_mode === "solicited" && existing.process_status !== "covered") {
+        // Choosing one or more slots is a partial availability response.
+        // Save that response first because the confirmation RPC requires it.
+        const { error: responseError } = await db.rpc("respond_to_program_solicitation", {
+          p_program_id: programId,
+          p_status: "partial",
+          p_note: "Disponibilités indiquées via les créneaux sélectionnés.",
+        });
+        if (responseError) throw responseError;
         const { error } = await db.rpc("confirm_program_solicitation", { p_assignment_member_id: existing.id });
         if (error) throw error;
       } else if (!existing) {
