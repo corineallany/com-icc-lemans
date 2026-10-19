@@ -1053,7 +1053,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           </DialogHeader>
           <div className="space-y-2">
             {(poles ?? []).filter((p: any) => !p.archived && !p.deleted).map((p: any) => (
-              <label key={p.id} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+              <div key={p.id} className="space-y-1">
+              <label className="flex items-center gap-2 rounded-md border p-3 text-sm">
                 <input type="checkbox" checked={selectedPoleIds.includes(p.id)} onChange={(e) => setSelectedPoleIds((ids) => e.target.checked ? [...new Set([...ids, p.id])] : ids.filter((id) => id !== p.id))} />
                 <span className="font-medium">{p.name}</span>
                 {assignments.some((a) => a.pole_id === p.id) ? <Badge variant="secondary" className="ml-auto">Déjà mobilisé</Badge> : null}
@@ -1073,6 +1074,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                   </div>
                 </div>
               ) : null}
+              </div>
             ))}
           </div>
           <p className="text-xs text-muted-foreground">Lorsqu’un nouveau pôle est ajouté à un programme avec plusieurs créneaux, un besoin initial d’une personne par créneau est créé. Tu peux ajuster chaque nombre dans le tableau des besoins.</p>
