@@ -126,6 +126,11 @@ const blankForm = (requester = ""): FormState => ({
   targets: [newTarget()],
 });
 const todayIso = () => new Date().toISOString().slice(0, 10);
+const toLocalDateTimeInput = (value: string) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 const overlap = (a1: string, a2: string, b1: string, b2: string) =>
   new Date(a1) < new Date(b2) && new Date(b1) < new Date(a2);
 
@@ -392,7 +397,9 @@ function Sollicitations() {
         s.nature === "replacement" || s.nature === "remplacement" ? "replacement" : "reinforcement",
       requester_member_id: s.requester_member_id ?? member?.id ?? "",
       program_id: s.program_id ?? "",
-      response_deadline: s.response_deadline ?? "",
+      response_deadline: s.response_deadline_at
+        ? toLocalDateTimeInput(s.response_deadline_at)
+        : s.response_deadline ? `${s.response_deadline}T23:59` : "",
       message: s.message ?? "",
       slot_selection_mode:
         s.slot_selection_mode === "member"
@@ -416,14 +423,10 @@ function Sollicitations() {
       const p: any = allActivePrograms.find((x: any) => x.id === form.program_id);
       if (!p?.start_date || p.start_date < todayIso())
         throw new Error("Choisis un programme à venir.");
-      if (
-        !form.response_deadline ||
-        form.response_deadline < todayIso() ||
-        form.response_deadline > p.start_date
-      )
-        throw new Error(
-          "La date limite doit être comprise entre aujourd'hui et la date du programme.",
-        );
+      const deadlineMs = form.response_deadline ? new Date(form.response_deadline).getTime() : NaN;
+      const programStartMs = new Date(`${p.start_date}T${p.start_time || "23:59"}:00`).getTime();
+      if (!form.response_deadline || !Number.isFinite(deadlineMs) || deadlineMs < Date.now() || deadlineMs > programStartMs)
+        throw new Error("La date et l’heure limites doivent être futures et précéder le début du programme.");
       const usableTargets = form.targets.filter((t) => t.type === "all" || t.ids.length > 0);
       if (!usableTargets.length) throw new Error("Ajoute au moins une cible.");
       const id = form.id ?? uid();
@@ -437,7 +440,8 @@ function Sollicitations() {
         program_id: p.id,
         event_name: p.title,
         event_date: p.start_date,
-        response_deadline: form.response_deadline,
+        response_deadline: form.response_deadline ? form.response_deadline.slice(0, 10) : null,
+        response_deadline_at: form.response_deadline ? new Date(form.response_deadline).toISOString() : null,
         message: form.message.trim() || null,
         target_type: "mixed",
         target_name: usableTargets.map(targetDisplay).join(" · "),
@@ -1052,14 +1056,13 @@ function Sollicitations() {
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Date limite de réponse *">
+              <Field label="Date et heure limite de réponse *">
                 <Input
-                  type="date"
-                  min={todayIso()}
-                  max={selectedProgram?.start_date || undefined}
+                  type="datetime-local"
                   value={form.response_deadline}
                   onChange={(e) => setForm({ ...form, response_deadline: e.target.value })}
                 />
+                <span className="text-xs text-muted-foreground">L’échéance peut être définie à l’heure près et doit précéder le début du programme.</span>
               </Field>
             </div>
             {form.program_id ? <ProgramFiles files={docsForProgram(form.program_id)} /> : null}
