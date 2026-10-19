@@ -16,9 +16,10 @@ type Props = {
   canChoose: boolean;
   isStaff: boolean;
   members: Array<{ id: string; full_name: string }>;
+  poles: Array<{ id: string; name: string }>;
 };
 
-export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isStaff, members }: Props) {
+export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isStaff, members, poles }: Props) {
   const qc = useQueryClient();
   const [assignmentByChoice, setAssignmentByChoice] = useState<Record<string, string>>({});
   const data = useQuery({
@@ -208,7 +209,7 @@ export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isSta
                             <Select value={selectedAssignment} onValueChange={(value) => setAssignmentByChoice((prev) => ({ ...prev, [choice.id]: value }))}>
                               <SelectTrigger className="h-8 min-w-[180px] flex-1"><SelectValue placeholder="Choisir le pôle à affecter" /></SelectTrigger>
                               <SelectContent>
-                                {eligibleAssignments.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.pole_id}</SelectItem>)}
+                                {eligibleAssignments.map((a: any) => <SelectItem key={a.id} value={a.id}>{poles.find((p) => p.id === a.pole_id)?.name ?? "Pôle"}</SelectItem>)}
                               </SelectContent>
                             </Select>
                             <Button size="sm" disabled={assignChoice.isPending || !selectedAssignment} onClick={() => assignChoice.mutate({ choice, assignmentId: selectedAssignment })}>Confirmer l’affectation</Button>
