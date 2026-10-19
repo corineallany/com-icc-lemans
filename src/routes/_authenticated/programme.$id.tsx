@@ -76,6 +76,7 @@ const arr = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 function ProgramSheet() {
   const { id } = Route.useParams();
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "participation" ? "participation" : "infos");
   const { member, isStaff } = useCurrentRole();
   const qc = useQueryClient();
   const programs = useQuery(programsQuery),
@@ -494,7 +495,7 @@ function ProgramSheet() {
         <Badge>{STATUS_LABEL[program.status] ?? program.status}</Badge>
         {program.archived ? <Badge variant="destructive">Archivé</Badge> : null}
       </div>
-      <Tabs defaultValue="infos">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="infos">Informations</TabsTrigger>
           <TabsTrigger value="participation">Participation & besoins</TabsTrigger>
@@ -560,7 +561,7 @@ function ProgramSheet() {
             </Card>
           ) : null}
           {requiresResponse ? (
-            <Card>
+            <Card id="program-response">
               <CardHeader>
                 <CardTitle>Ma réponse à la sollicitation</CardTitle>
               </CardHeader>
