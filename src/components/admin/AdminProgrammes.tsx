@@ -378,6 +378,29 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         )
       )
         throw new Error("Chaque créneau doit avoir un jour et des horaires valides.");
+      if (v.detailed_scheduling) {
+        for (const [poleId, poleDraft] of Object.entries(v.poles).filter(([, x]) => x.selected)) {
+          const solicitedMembers = poleDraft.memberIds.filter((memberId) => (poleDraft.memberModes?.[memberId] ?? "direct") === "solicited");
+          if (!solicitedMembers.length) continue;
+          const neededSlots = v.serviceSlots.filter((slot) => {
+            const count = poleDraft.requiredBySlot?.[slot.key];
+            return count !== "" && count != null && Number(count) >= 1;
+          });
+          if (!neededSlots.length) {
+            const poleName = activePoles.find((p) => p.id === poleId)?.name ?? "ce pôle";
+            throw new Error(`Renseigne au moins un effectif nécessaire pour ${poleName} avant d’envoyer les sollicitations.`);
+          }
+          if (v.slot_selection_mode === "organizer") {
+            for (const memberId of solicitedMembers) {
+              const selectedKeys = poleDraft.memberSlotIds?.[memberId] ?? v.serviceSlots.map((slot) => slot.key);
+              if (!neededSlots.some((slot) => selectedKeys.includes(slot.key))) {
+                const memberName = allMembers.find((m: any) => m.id === memberId)?.full_name ?? "ce membre";
+                throw new Error(`Sélectionne au moins un créneau avec un besoin renseigné pour ${memberName}.`);
+              }
+            }
+          }
+        }
+      }
       const selectedPoles = { ...v.poles };
       const targetPoles = Object.entries(selectedPoles).filter(([, x]) => x.selected).map(([id]) => id);
       const check = await (supabase as any).rpc("check_program_write_access", { p_program_id: v.id ?? null, p_poles: targetPoles, p_generate: dates.length > 1 });
