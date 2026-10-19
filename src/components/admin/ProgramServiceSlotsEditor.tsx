@@ -32,14 +32,9 @@ export type ServiceSlotDraft = {
 
 type Props = {
   enabled: boolean;
-  selectionMode: "organizer" | "member";
   slots: ServiceSlotDraft[];
   dates: string[];
-  poles: Array<{ id: string; name: string }>;
-  members: Array<{ id: string; full_name: string }>;
-  links: Array<{ member_id: string; pole_id: string }>;
   onEnabledChange: (enabled: boolean) => void;
-  onSelectionModeChange: (mode: "organizer" | "member") => void;
   onChange: (slots: ServiceSlotDraft[]) => void;
 };
 
@@ -117,35 +112,6 @@ export function ProgramServiceSlotsEditor(props: Props) {
       </label>
       {props.enabled ? (
         <>
-          <div className="rounded-xl bg-muted/40 p-3">
-            <p className="text-sm font-semibold">Lors d’une sollicitation</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <label className="flex gap-2 rounded-lg border bg-background p-3 text-sm">
-                <Checkbox
-                  checked={props.selectionMode === "organizer"}
-                  onCheckedChange={() => props.onSelectionModeChange("organizer")}
-                />
-                <span>
-                  <b>Créneaux attribués par l’organisateur</b>
-                  <small className="block text-muted-foreground">
-                    La personne sollicitée répond pour les créneaux qui lui sont proposés.
-                  </small>
-                </span>
-              </label>
-              <label className="flex gap-2 rounded-lg border bg-background p-3 text-sm">
-                <Checkbox
-                  checked={props.selectionMode === "member"}
-                  onCheckedChange={() => props.onSelectionModeChange("member")}
-                />
-                <span>
-                  <b>Laisser le membre choisir ses créneaux</b>
-                  <small className="block text-muted-foreground">
-                    Le membre choisira dans la fiche du programme, dans « Mes créneaux ».
-                  </small>
-                </span>
-              </label>
-            </div>
-          </div>
           <div className="flex items-center justify-between gap-2">
             <div>
               <h3 className="font-black text-icc-violet">Créneaux du programme</h3>
