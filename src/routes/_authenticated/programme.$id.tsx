@@ -264,12 +264,14 @@ function ProgramSheet() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["timeline", "program", id] });
+      toast.success("Statut de la tâche mis à jour");
     },
+    onError: (e: any) => toast.error(e.message || "Impossible de modifier la tâche."),
   });
   const [taskTitle, setTaskTitle] = useState("");
   const addTask = useMutation({
     mutationFn: async () => {
-      if (!taskTitle.trim()) return;
+      if (!taskTitle.trim()) throw new Error("Saisis le titre de la tâche.");
       const { error } = await supabase
         .from("tasks")
         .insert({ title: taskTitle.trim(), program_id: id, status: "todo", priority: "normale" });
@@ -280,6 +282,7 @@ function ProgramSheet() {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       toast.success("Tâche ajoutée");
     },
+    onError: (e: any) => toast.error(e.message || "Impossible d’ajouter la tâche."),
   });
   const [bulkOpen, setBulkOpen] = useState(false),
     [bulkText, setBulkText] = useState("");
