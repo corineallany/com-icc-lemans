@@ -96,7 +96,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("programs")
-        .select("id,title,start_date,start_time,response_deadline,response_deadline_at,response_deadline_offset_value,response_deadline_offset_unit,response_deadline_anchor")
+        .select("id,title,start_date,start_time,end_date,end_time,detailed_scheduling,response_deadline,response_deadline_at,response_deadline_offset_value,response_deadline_offset_unit,response_deadline_anchor")
         .eq("id", programId)
         .single();
       if (error) throw error;
@@ -257,8 +257,50 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       )
     ).length;
   };
-  const totalRequired = (slotNeeds.data ?? []).reduce((sum: number, need: any) => sum + Number(need.required_count || 0), 0);
-  const totalCovered = (slotNeeds.data ?? []).reduce((sum: number, need: any) => sum + coveredCountForNeed(need, need.service_slot_id), 0);
+  const legacySlotId = `legacy-program::${programId}`;
+  const displaySlots = (serviceSlots.data ?? []).length
+    ? serviceSlots.data ?? []
+    : programInfo.data
+      ? [{
+          id: legacySlotId,
+          service_date: programInfo.data.start_date,
+          start_time: programInfo.data.start_time || "00:00",
+          end_time: programInfo.data.end_time || "23:59",
+          label: "Programme entier",
+          is_legacy: true,
+        }]
+      : [];
+  const displayNeeds = (serviceSlots.data ?? []).length
+    ? slotNeeds.data ?? []
+    : assignments
+        .filter((assignment) => Number(assignment.required_count || 0) > 0)
+        .map((assignment) => ({
+          assignment_id: assignment.id,
+          service_slot_id: legacySlotId,
+          required_count: Number(assignment.required_count || 0),
+          is_legacy: true,
+        }));
+  const coveredCountForNeedDisplay = (need: any, slotId: string) => {
+    if (slotId !== legacySlotId) return coveredCountForNeed(need, slotId);
+    return (modes.data ?? []).filter((row: any) =>
+      row.assignment_id === need.assignment_id &&
+      ["direct", "proposal"].includes(row.assignment_mode) &&
+      row.process_status !== "covered"
+    ).length;
+  };
+  const replacementRowsForNeed = (need: any, slotId: string) =>
+    (modes.data ?? []).filter((row: any) =>
+      row.assignment_id === need.assignment_id &&
+      ["direct", "proposal"].includes(row.assignment_mode) &&
+      row.process_status === "covered" &&
+      row.process_closed_reason === "Affectation retirée" &&
+      (slotId === legacySlotId ||
+        (assignmentMemberSlots.data ?? []).some((link: any) =>
+          link.assignment_member_id === row.id && link.service_slot_id === slotId
+        ))
+    );
+  const totalRequired = displayNeeds.reduce((sum: number, need: any) => sum + Number(need.required_count || 0), 0);
+  const totalCovered = displayNeeds.reduce((sum: number, need: any) => sum + coveredCountForNeedDisplay(need, need.service_slot_id), 0);
 
   const deadlineForSlot = (slotId: string) => {
     const slot = (serviceSlots.data ?? []).find((s: any) => s.id === slotId);
@@ -585,6 +627,12 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     mutationFn: async ({ assignmentId, slotId, count }: { assignmentId: string; slotId: string; count: number }) => {
       if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
       if (!Number.isInteger(count) || count < 1) throw new Error("Le besoin doit être au moins égal à une personne.");
+      if (slotId === `legacy-program::${programId}`) {
+        const { error } = await (supabase as any).from("program_assignments")
+          .update({ required_count: count }).eq("id", assignmentId);
+        if (error) throw error;
+        return;
+      }
       const { error } = await (supabase as any).from("program_assignment_slot_needs")
         .update({ required_count: count, updated_at: new Date().toISOString() })
         .eq("assignment_id", assignmentId).eq("service_slot_id", slotId);
@@ -726,25 +774,29 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         </div>
       ) : null}
 
-      {isStaff && (serviceSlots.data ?? []).length ? (
+      {isStaff && displaySlots.length ? (
         <div className="space-y-2 rounded-lg border bg-background p-3">
           <h4 className="font-bold">Besoin par créneau</h4>
-          {(serviceSlots.data ?? []).map((slot: any) => {
-            const needs = (slotNeeds.data ?? []).filter((n: any) => n.service_slot_id === slot.id);
+          {(displaySlots as any[]).map((slot: any) => {
+            const needs = displayNeeds.filter((n: any) => n.service_slot_id === slot.id);
             if (!needs.length) return null;
             return <div key={slot.id} className="rounded-md bg-muted/30 p-2">
               <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div>
               {needs.map((need: any) => {
                 const assignment = assignments.find((x) => x.id === need.assignment_id);
                 if (!assignment) return null;
-                const slotCount = coveredCountForNeed(need, slot.id);
+                const slotCount = coveredCountForNeedDisplay(need, slot.id);
+                const replacementRows = replacementRowsForNeed(need, slot.id);
+                const replacementCount = Math.min(replacementRows.length, Math.max(0, Number(need.required_count) - slotCount));
+                const reinforcementCount = Math.max(0, Number(need.required_count) - slotCount - replacementCount);
                 const pendingCount = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && m.assignment_mode === "solicited" && m.process_status !== "covered").length;
                 return <div key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span>{poleNames.get(assignment.pole_id) ?? "Pôle"} : <b>{slotCount}/{need.required_count}</b> affecté(s) · {Math.max(0, Number(need.required_count) - slotCount)} à couvrir{pendingCount ? ` · ${pendingCount} sollicitation(s) en attente` : ""}</span>
                   <div className="flex items-center gap-1">
                     <Input className="h-8 w-20" aria-label={`Besoin ${poleNames.get(assignment.pole_id) ?? "du pôle"}`} type="number" min={1} step={1} value={needEdits[`${need.assignment_id}::${slot.id}`] ?? String(need.required_count)} onChange={(e) => setNeedEdits((v) => ({ ...v, [`${need.assignment_id}::${slot.id}`]: e.target.value }))} />
                     <Button size="sm" variant="outline" disabled={updateStaffingNeed.isPending || Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) === Number(need.required_count)} onClick={() => updateStaffingNeed.mutate({ assignmentId: need.assignment_id, slotId: slot.id, count: Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) })}>Enregistrer</Button>
-                    {slotCount < Number(need.required_count) ? <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "reinforcement", slot.id)}>Renfort</Button> : null}
+                    {reinforcementCount > 0 ? <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "reinforcement", slot.is_legacy ? "" : slot.id)}>Renfort</Button> : null}
+                    {replacementCount > 0 ? <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "replacement", slot.is_legacy ? "" : slot.id, replacementRows[0]?.member_id ?? "")}>Remplacement</Button> : null}
                   </div>
                 </div>;
               })}
