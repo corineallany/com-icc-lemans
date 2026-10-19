@@ -22,6 +22,10 @@ export type ServiceSlotDraft = {
   start_time: string;
   end_time: string;
   required_count: number | "";
+  deadline_override: boolean;
+  response_deadline_offset_value: string;
+  response_deadline_offset_unit: "hours" | "days";
+  response_deadline_anchor: "program" | "slot";
   pole_id: string;
   memberIds: string[];
 };
@@ -46,6 +50,10 @@ const makeSlot = (date = ""): ServiceSlotDraft => ({
   start_time: "",
   end_time: "",
   required_count: 1,
+  deadline_override: false,
+  response_deadline_offset_value: "",
+  response_deadline_offset_unit: "hours",
+  response_deadline_anchor: "slot",
   pole_id: "",
   memberIds: [],
 });
@@ -209,6 +217,23 @@ export function ProgramServiceSlotsEditor(props: Props) {
                       onChange={(e) => update(slot.key, { end_time: e.target.value })}
                     />
                   </label>
+                </div>
+                <div className="rounded-lg bg-muted/30 p-3">
+                  <label className="flex items-center gap-2 text-sm font-semibold">
+                    <Checkbox checked={!!slot.deadline_override} onCheckedChange={(v) => update(slot.key, { deadline_override: v === true })} />
+                    Définir un délai de réponse propre à ce créneau
+                  </label>
+                  {slot.deadline_override ? (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      <Input type="number" min={1} step={1} placeholder="Nombre" value={slot.response_deadline_offset_value} onChange={(e) => update(slot.key, { response_deadline_offset_value: e.target.value })} />
+                      <Select value={slot.response_deadline_offset_unit} onValueChange={(v: "hours" | "days") => update(slot.key, { response_deadline_offset_unit: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="hours">Heures</SelectItem><SelectItem value="days">Jours</SelectItem></SelectContent>
+                      </Select>
+                      <Select value={slot.response_deadline_anchor} onValueChange={(v: "program" | "slot") => update(slot.key, { response_deadline_anchor: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="program">Avant le programme</SelectItem><SelectItem value="slot">Avant ce créneau</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                  ) : <p className="mt-1 text-xs text-muted-foreground">Le délai général du programme s’appliquera à ce créneau.</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
