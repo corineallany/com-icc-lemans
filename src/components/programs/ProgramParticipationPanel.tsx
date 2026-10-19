@@ -687,6 +687,42 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         </div> : null}
       </div>
 
+      {isStaff ? (
+        <div className="grid gap-3 rounded-lg border border-red-200 bg-red-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 dark:border-red-900 dark:bg-red-950/20">
+          <div><p className="text-xs text-muted-foreground">Besoin initial par créneau</p><p className="text-xl font-black">{totalRequired}</p></div>
+          <div><p className="text-xs text-muted-foreground">Places couvertes</p><p className="text-xl font-black">{totalCovered}</p></div>
+          <div><p className="text-xs text-muted-foreground">À couvrir</p><p className="text-xl font-black">{Math.max(0, totalRequired - totalCovered)}</p></div>
+          <div><p className="text-xs text-muted-foreground">Réponses en attente</p><p className="text-xl font-black">{(modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered" && !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length + (proposals.data ?? []).filter((p: any) => p.status === "pending").length}</p></div>
+        </div>
+      ) : null}
+
+      {isStaff && (serviceSlots.data ?? []).length ? (
+        <div className="space-y-2 rounded-lg border bg-background p-3">
+          <h4 className="font-bold">Besoin par créneau</h4>
+          {(serviceSlots.data ?? []).map((slot: any) => {
+            const needs = (slotNeeds.data ?? []).filter((n: any) => n.service_slot_id === slot.id);
+            if (!needs.length) return null;
+            return <div key={slot.id} className="rounded-md bg-muted/30 p-2">
+              <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div>
+              {needs.map((need: any) => {
+                const assignment = assignments.find((x) => x.id === need.assignment_id);
+                if (!assignment) return null;
+                const slotCount = coveredCountForNeed(need, slot.id);
+                const pendingCount = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && m.assignment_mode === "solicited" && m.process_status !== "covered").length;
+                return <div key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>{poleNames.get(assignment.pole_id) ?? "Pôle"} : <b>{slotCount}/{need.required_count}</b> affecté(s) · {Math.max(0, Number(need.required_count) - slotCount)} à couvrir{pendingCount ? ` · ${pendingCount} sollicitation(s) en attente` : ""}</span>
+                  <div className="flex items-center gap-1">
+                    <Input className="h-8 w-20" aria-label={`Besoin ${poleNames.get(assignment.pole_id) ?? "du pôle"}`} type="number" min={1} step={1} value={needEdits[`${need.assignment_id}::${slot.id}`] ?? String(need.required_count)} onChange={(e) => setNeedEdits((v) => ({ ...v, [`${need.assignment_id}::${slot.id}`]: e.target.value }))} />
+                    <Button size="sm" variant="outline" disabled={updateStaffingNeed.isPending || Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) === Number(need.required_count)} onClick={() => updateStaffingNeed.mutate({ assignmentId: need.assignment_id, slotId: slot.id, count: Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) })}>Enregistrer</Button>
+                    {slotCount < Number(need.required_count) ? <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "reinforcement", slot.id)}>Renfort</Button> : null}
+                  </div>
+                </div>;
+              })}
+            </div>;
+          })}
+        </div>
+      ) : null}
+
       {programConfig.data?.detailed_scheduling &&
       programConfig.data?.slot_selection_mode === "member" ? (
         <ProgramMemberSlotChooser
@@ -763,14 +799,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         </div>
       ) : null}
 
-      {isStaff ? (
-        <div className="grid gap-3 rounded-lg border border-red-200 bg-red-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 dark:border-red-900 dark:bg-red-950/20">
-          <div><p className="text-xs text-muted-foreground">Besoin initial par créneau</p><p className="text-xl font-black">{totalRequired}</p></div>
-          <div><p className="text-xs text-muted-foreground">Places couvertes</p><p className="text-xl font-black">{totalCovered}</p></div>
-          <div><p className="text-xs text-muted-foreground">À couvrir</p><p className="text-xl font-black">{Math.max(0, totalRequired - totalCovered)}</p></div>
-          <div><p className="text-xs text-muted-foreground">Réponses en attente</p><p className="text-xl font-black">{(modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered" && !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length + (proposals.data ?? []).filter((p: any) => p.status === "pending").length}</p></div>
-        </div>
-      ) : null}
+
 
       {isStaff && (supportRequests.data ?? []).length ? (
         <div className="space-y-2 rounded-lg border bg-background p-3">
@@ -791,32 +820,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         </div>
       ) : null}
 
-      {isStaff && (serviceSlots.data ?? []).length ? (
-        <div className="space-y-2 rounded-lg border bg-background p-3">
-          <h4 className="font-bold">Besoin par créneau</h4>
-          {(serviceSlots.data ?? []).map((slot: any) => {
-            const needs = (slotNeeds.data ?? []).filter((n: any) => n.service_slot_id === slot.id);
-            if (!needs.length) return null;
-            return <div key={slot.id} className="rounded-md bg-muted/30 p-2">
-              <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div>
-              {needs.map((need: any) => {
-                const assignment = assignments.find((x) => x.id === need.assignment_id);
-                if (!assignment) return null;
-                const slotCount = coveredCountForNeed(need, slot.id);
-                const pendingCount = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && m.assignment_mode === "solicited" && m.process_status !== "covered").length;
-                return <div key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span>{poleNames.get(assignment.pole_id) ?? "Pôle"} : <b>{slotCount}/{need.required_count}</b> affecté(s) · {Math.max(0, Number(need.required_count) - slotCount)} à couvrir{pendingCount ? ` · ${pendingCount} sollicitation(s) en attente` : ""}</span>
-                  <div className="flex items-center gap-1">
-                    <Input className="h-8 w-20" aria-label={`Besoin ${poleNames.get(assignment.pole_id) ?? "du pôle"}`} type="number" min={1} step={1} value={needEdits[`${need.assignment_id}::${slot.id}`] ?? String(need.required_count)} onChange={(e) => setNeedEdits((v) => ({ ...v, [`${need.assignment_id}::${slot.id}`]: e.target.value }))} />
-                    <Button size="sm" variant="outline" disabled={updateStaffingNeed.isPending || Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) === Number(need.required_count)} onClick={() => updateStaffingNeed.mutate({ assignmentId: need.assignment_id, slotId: slot.id, count: Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) })}>Enregistrer</Button>
-                    {slotCount < Number(need.required_count) ? <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "reinforcement", slot.id)}>Renfort</Button> : null}
-                  </div>
-                </div>;
-              })}
-            </div>;
-          })}
-        </div>
-      ) : null}
+
 
       {assignments.map((a) => {
         const required = a.required_count || 0;
