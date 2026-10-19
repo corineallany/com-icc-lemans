@@ -625,12 +625,6 @@ function ProgramSheet() {
           ) : null}
         </TabsContent>
         <TabsContent value="participation" className="space-y-4">
-          <ProgramStaffingSummary
-            programId={id}
-            assignments={program.assignments as any}
-            poleName={poleName}
-            isStaff={isStaff}
-          />
           <ProgramParticipationPanel
             programId={id}
             programTitle={program.title}
