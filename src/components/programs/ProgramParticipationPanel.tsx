@@ -72,6 +72,11 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const [slotDeadlineEdits, setSlotDeadlineEdits] = useState<Record<string, { enabled: boolean; value: string; unit: "hours" | "days"; anchor: "program" | "slot" }>>({});
   const [poleEditorOpen, setPoleEditorOpen] = useState(false);
   const [selectedPoleIds, setSelectedPoleIds] = useState<string[]>([]);
+  const [poleSlotSelection, setPoleSlotSelection] = useState<Record<string, string[]>>({});
+  const [deadlinesOpen, setDeadlinesOpen] = useState(false);
+  const [openSlotDeadlines, setOpenSlotDeadlines] = useState<Record<string, boolean>>({});
+  const [openMemberSelectors, setOpenMemberSelectors] = useState<Record<string, boolean>>({});
+  const [selectedMembers, setSelectedMembers] = useState<Record<string, string[]>>({});
 
   const programConfig = useQuery({
     queryKey: ["program-slot-config", programId],
@@ -526,11 +531,14 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           .select("id").single();
         if (error) throw error;
         if ((serviceSlots.data ?? []).length) {
-          const needs = (serviceSlots.data ?? []).map((slot: any) => ({
+          const selectedSlots = poleSlotSelection[poleId] ?? (serviceSlots.data ?? []).map((slot: any) => slot.id);
+          const needs = (serviceSlots.data ?? []).filter((slot: any) => selectedSlots.includes(slot.id)).map((slot: any) => ({
             assignment_id: created.id, service_slot_id: slot.id, required_count: 1,
           }));
-          const { error: needsError } = await (supabase as any).from("program_assignment_slot_needs").insert(needs);
-          if (needsError) throw needsError;
+          if (needs.length) {
+            const { error: needsError } = await (supabase as any).from("program_assignment_slot_needs").insert(needs);
+            if (needsError) throw needsError;
+          }
         }
       }
     },
@@ -664,18 +672,19 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
   return (
     <div className="mt-4 space-y-3 rounded-xl border bg-muted/10 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-black text-icc-violet">Participation & besoins</h3>
-          <p className="text-xs text-muted-foreground">
-            Affectation directe = aucune réponse demandée. Sollicitation = demande de participation
-            liée à ce programme, avec réponse du membre. Le choix des créneaux reste indépendant.
-          </p>
+          <p className="text-xs text-muted-foreground">Sélectionne un membre de chaque pôle, puis choisis de l’affecter ou de le solliciter.</p>
         </div>
-        {isStaff ? <Button size="sm" variant="outline" onClick={() => {
-          setSelectedPoleIds(assignments.map((a) => a.pole_id));
-          setPoleEditorOpen(true);
-        }}>Modifier les pôles mobilisés</Button> : null}
+        {isStaff ? <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={() => {
+            setSelectedPoleIds(assignments.map((a) => a.pole_id));
+            setPoleSlotSelection(Object.fromEntries(assignments.map((a) => [a.pole_id, (serviceSlots.data ?? []).map((slot: any) => slot.id)])));
+            setPoleEditorOpen(true);
+          }}>Modifier les pôles mobilisés</Button>
+          <Button size="sm" variant="outline" onClick={() => setDeadlinesOpen((v) => !v)}>{deadlinesOpen ? "Masquer les délais" : "Délais de réponse"}</Button>
+        </div> : null}
       </div>
 
       {programConfig.data?.detailed_scheduling &&
@@ -689,7 +698,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         />
       ) : null}
 
-      {isStaff && programInfo.data ? (
+      {isStaff && deadlinesOpen && programInfo.data ? (
         <div className="space-y-3 rounded-lg border bg-background p-3">
           <div>
             <h4 className="font-bold">Délais de réponse</h4>
@@ -720,7 +729,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         </div>
       ) : null}
 
-      {isStaff && (serviceSlots.data ?? []).length ? (
+      {isStaff && deadlinesOpen && (serviceSlots.data ?? []).length ? (
         <div className="space-y-3 rounded-lg border bg-background p-3">
           <h4 className="font-bold">Délais personnalisés par créneau</h4>
           <p className="text-xs text-muted-foreground">Un créneau sans délai personnalisé hérite du délai général. Tu peux définir une exception par créneau ou rétablir l’héritage.</p>
@@ -733,7 +742,11 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
             };
             const updateEdit = (patch: Partial<typeof edit>) => setSlotDeadlineEdits((prev) => ({ ...prev, [slot.id]: { ...edit, ...patch } }));
             return <div key={slot.id} className="rounded-md border p-3">
-              <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div>
+              <button type="button" className="flex w-full items-center justify-between gap-2 text-left text-sm font-semibold" onClick={() => setOpenSlotDeadlines((v) => ({ ...v, [slot.id]: !v[slot.id] }))}>
+                <span>{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</span>
+                <span className="text-xs font-medium text-muted-foreground">{openSlotDeadlines[slot.id] ? "Masquer ▲" : (slot.response_deadline_at ? "Délai défini · Modifier ▼" : "Personnaliser ▼")}</span>
+              </button>
+              {openSlotDeadlines[slot.id] ? <>
               <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={edit.enabled} onChange={(e) => updateEdit({ enabled: e.target.checked })} /> Personnaliser le délai de ce créneau</label>
               {edit.enabled ? <div className="mt-2 grid gap-2 sm:grid-cols-3">
                 <Input type="number" min={1} step={1} placeholder="Nombre" value={edit.value} onChange={(e) => updateEdit({ value: e.target.value })} />
@@ -744,13 +757,14 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                 <span className="text-xs text-muted-foreground">{slot.response_deadline_at ? `Échéance enregistrée : ${new Date(slot.response_deadline_at).toLocaleString("fr-FR")}` : "Aucune échéance propre à ce créneau."}</span>
                 <Button size="sm" variant="outline" disabled={saveSlotDeadline.isPending} onClick={() => saveSlotDeadline.mutate(slot.id)}>{saveSlotDeadline.isPending ? "Enregistrement…" : edit.enabled ? "Enregistrer ce délai" : "Rétablir le délai général"}</Button>
               </div>
+              </> : null}
             </div>;
           })}
         </div>
       ) : null}
 
       {isStaff ? (
-        <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 rounded-lg border border-red-200 bg-red-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 dark:border-red-900 dark:bg-red-950/20">
           <div><p className="text-xs text-muted-foreground">Besoin initial par créneau</p><p className="text-xl font-black">{totalRequired}</p></div>
           <div><p className="text-xs text-muted-foreground">Places couvertes</p><p className="text-xl font-black">{totalCovered}</p></div>
           <div><p className="text-xs text-muted-foreground">À couvrir</p><p className="text-xl font-black">{Math.max(0, totalRequired - totalCovered)}</p></div>
@@ -779,7 +793,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
       {isStaff && (serviceSlots.data ?? []).length ? (
         <div className="space-y-2 rounded-lg border bg-background p-3">
-          <h4 className="font-bold">Besoins par créneau</h4>
+          <h4 className="font-bold">Besoin par créneau</h4>
           {(serviceSlots.data ?? []).map((slot: any) => {
             const needs = (slotNeeds.data ?? []).filter((n: any) => n.service_slot_id === slot.id);
             if (!needs.length) return null;
@@ -795,7 +809,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                   <div className="flex items-center gap-1">
                     <Input className="h-8 w-20" aria-label={`Besoin ${poleNames.get(assignment.pole_id) ?? "du pôle"}`} type="number" min={1} step={1} value={needEdits[`${need.assignment_id}::${slot.id}`] ?? String(need.required_count)} onChange={(e) => setNeedEdits((v) => ({ ...v, [`${need.assignment_id}::${slot.id}`]: e.target.value }))} />
                     <Button size="sm" variant="outline" disabled={updateStaffingNeed.isPending || Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) === Number(need.required_count)} onClick={() => updateStaffingNeed.mutate({ assignmentId: need.assignment_id, slotId: slot.id, count: Number(needEdits[`${need.assignment_id}::${slot.id}`] ?? need.required_count) })}>Enregistrer</Button>
-                    {slotCount < Number(need.required_count) ? <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "reinforcement", slot.id)}>Demander un renfort</Button> : null}
+                    {slotCount < Number(need.required_count) ? <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "reinforcement", slot.id)}>Renfort</Button> : null}
                   </div>
                 </div>;
               })}
@@ -966,56 +980,29 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               </div>
             ) : null}
 
-            {isStaff && (!covered || confirmed.length > 0) ? (
-              <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-                {!covered ? <Button size="sm" onClick={() => openSupportRequest(a.id, "reinforcement")}>Demander un renfort</Button> : null}
-                {confirmed.map((x: any) => (
-                  <Button key={`replace-${x.id}`} size="sm" variant="outline" onClick={() => openSupportRequest(a.id, "replacement", "", x.member_id)}>
-                    Demander le remplacement de {names.get(x.member_id) ?? "la personne affectée"}
-                  </Button>
-                ))}
-              </div>
-            ) : null}
             {isStaff && !covered ? (
-              <div className="mt-3 grid gap-3 border-t pt-3 lg:grid-cols-2">
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <p className="text-xs font-black">Affecter directement</p>
-                  <p className="mb-2 text-xs text-muted-foreground">
-                    Membre du pôle uniquement. Participation immédiate, aucune réponse demandée.
-                  </p>
-                  <div className="space-y-2">
-                    <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
-                      {directCandidates.map((m) => <label key={m.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={(direct[a.id] ?? []).includes(m.id)} onChange={(e) => setDirect((v) => ({ ...v, [a.id]: e.target.checked ? [...(v[a.id] ?? []), m.id] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
-                        {m.full_name}
-                      </label>)}
-                      {!directCandidates.length ? <p className="text-xs text-muted-foreground">Aucun membre disponible dans ce pôle.</p> : null}
-                    </div>
-                    <Button size="sm" disabled={!(direct[a.id] ?? []).length} onClick={() => (direct[a.id] ?? []).forEach((mid) => assign.mutate({ aid: a.id, mid }))}>
-                      Affecter les { (direct[a.id] ?? []).length || "" } membre(s) sélectionné(s) sans réponse
-                    </Button>
+              <div className="mt-3 border-t pt-3">
+                <Button size="sm" variant="outline" onClick={() => setOpenMemberSelectors((v) => ({ ...v, [a.id]: !v[a.id] }))}>
+                  {openMemberSelectors[a.id] ? "Masquer les membres" : "Sélectionner"}
+                </Button>
+                {openMemberSelectors[a.id] ? (
+                  <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
+                    {directCandidates.map((m) => <label key={m.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50">
+                      <input type="checkbox" checked={(selectedMembers[a.id] ?? []).includes(m.id)} onChange={(e) => setSelectedMembers((v) => ({ ...v, [a.id]: e.target.checked ? [...new Set([...(v[a.id] ?? []), m.id])] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
+                      {m.full_name}
+                    </label>)}
+                    {!directCandidates.length ? <p className="p-2 text-xs text-muted-foreground">Aucun membre disponible dans ce pôle.</p> : null}
                   </div>
-                </div>
-
-                <div className="rounded-lg border bg-muted/20 p-3">
-                  <p className="text-xs font-black">Solliciter</p>
-                  <p className="mb-2 text-xs text-muted-foreground">
-                    Demande liée à ce programme et à ce besoin. Le membre doit répondre. Un renfort
-                    d’un autre pôle est possible ici.
-                  </p>
-                  <div className="space-y-2">
-                    <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
-                      {solicitationCandidates.map((m) => <label key={m.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={(solicit[a.id] ?? []).includes(m.id)} onChange={(e) => setSolicit((v) => ({ ...v, [a.id]: e.target.checked ? [...(v[a.id] ?? []), m.id] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
-                        {m.full_name}
-                      </label>)}
-                      {!solicitationCandidates.length ? <p className="text-xs text-muted-foreground">Aucun autre membre disponible à solliciter.</p> : null}
+                ) : null}
+                {(selectedMembers[a.id] ?? []).filter((mid) => directCandidates.some((m) => m.id === mid)).map((mid) => (
+                  <div key={mid} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm">
+                    <b>{names.get(mid) ?? mid}</b>
+                    <div className="flex gap-2">
+                      <Button size="sm" disabled={assign.isPending} onClick={() => assign.mutate({ aid: a.id, mid })}>Affecter</Button>
+                      <Button size="sm" variant="outline" disabled={solicitProgram.isPending} onClick={() => solicitProgram.mutate({ aid: a.id, mid })}>Solliciter</Button>
                     </div>
-                    <Button size="sm" variant="outline" disabled={!(solicit[a.id] ?? []).length} onClick={() => (solicit[a.id] ?? []).forEach((mid) => solicitProgram.mutate({ aid: a.id, mid }))}>
-                      Solliciter les { (solicit[a.id] ?? []).length || "" } membre(s) sélectionné(s)
-                    </Button>
                   </div>
-                </div>
+                ))}
               </div>
             ) : null}
           </div>
@@ -1036,6 +1023,21 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                 <span className="font-medium">{p.name}</span>
                 {assignments.some((a) => a.pole_id === p.id) ? <Badge variant="secondary" className="ml-auto">Déjà mobilisé</Badge> : null}
               </label>
+              {selectedPoleIds.includes(p.id) && (serviceSlots.data ?? []).length ? (
+                <div className="ml-7 mt-1 rounded-md border bg-muted/20 p-2">
+                  <p className="mb-2 text-xs font-semibold">Créneaux concernés</p>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={(poleSlotSelection[p.id] ?? (serviceSlots.data ?? []).map((s: any) => s.id)).length === (serviceSlots.data ?? []).length} onChange={(e) => setPoleSlotSelection((v) => ({ ...v, [p.id]: e.target.checked ? (serviceSlots.data ?? []).map((s: any) => s.id) : [] }))} />
+                    Tous les créneaux du programme
+                  </label>
+                  <div className="mt-1 grid gap-1 sm:grid-cols-2">
+                    {(serviceSlots.data ?? []).map((slot: any) => <label key={slot.id} className="flex items-center gap-2 text-xs">
+                      <input type="checkbox" checked={(poleSlotSelection[p.id] ?? (serviceSlots.data ?? []).map((s: any) => s.id)).includes(slot.id)} onChange={(e) => setPoleSlotSelection((v) => { const current = v[p.id] ?? (serviceSlots.data ?? []).map((s: any) => s.id); return { ...v, [p.id]: e.target.checked ? [...new Set([...current, slot.id])] : current.filter((id) => id !== slot.id) }; })} />
+                      {slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}
+                    </label>)}
+                  </div>
+                </div>
+              ) : null}
             ))}
           </div>
           <p className="text-xs text-muted-foreground">Lorsqu’un nouveau pôle est ajouté à un programme avec plusieurs créneaux, un besoin initial d’une personne par créneau est créé. Tu peux ajuster chaque nombre dans le tableau des besoins.</p>
