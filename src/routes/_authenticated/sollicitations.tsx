@@ -258,6 +258,11 @@ function Sollicitations() {
 
   function deadlineText(value?: string | null) {
     if (!value) return "—";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      if (value < todayIso()) return `Échéance dépassée · ${formatDate(value)}`;
+      if (value === todayIso()) return `À répondre aujourd'hui · ${formatDate(value)}`;
+      return `Réponse attendue avant le ${formatDate(value)}`;
+    }
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return formatDate(value);
     const text = date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
