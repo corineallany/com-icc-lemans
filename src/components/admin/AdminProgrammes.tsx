@@ -524,6 +524,10 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         const poleDraft = selectedPoles[assignment.pole_id];
         for (const memberId of poleDraft.memberIds) {
           if ((poleDraft.memberModes?.[memberId] ?? "direct") !== "solicited") continue;
+          // Per-slot solicitations are sent after the new slot IDs exist, with the
+          // selected slot list and its precise notification. Global solicitations
+          // (and simple programmes) keep the existing programme-wide workflow.
+          if (v.detailed_scheduling && v.slot_selection_mode === "organizer") continue;
           const { error } = await (supabase as any).rpc("solicit_program_member", {
             p_assignment_id: assignment.id,
             p_member_id: memberId,
@@ -619,9 +623,9 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
             if (!savedSlot) return [];
             return poleDraft.memberIds.flatMap((memberId) => {
               const memberMode = poleDraft.memberModes?.[memberId] ?? "direct";
-              // In global mobilisation, a solicited member chooses availability later;
-              // do not pre-link that person to every slot before they respond.
-              if (v.slot_selection_mode === "member" && memberMode === "solicited") return [];
+              // Global solicitations let the member choose later. In per-slot mode,
+              // the server RPC below creates precise links for solicited members.
+              if (memberMode === "solicited" && (v.slot_selection_mode === "member" || v.slot_selection_mode === "organizer")) return [];
               const selectedSlots = poleDraft.memberSlotIds?.[memberId] ?? v.serviceSlots.map((item) => item.key);
               if (!selectedSlots.includes(slot.key)) return [];
               const am = savedMembers.find(
@@ -642,6 +646,28 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         if (memberSlots.length) {
           const x = await db.from("program_assignment_member_slots").insert(memberSlots);
           if (x.error) throw x.error;
+        }
+
+        if (v.slot_selection_mode === "organizer") {
+          for (const assignment of rows) {
+            const poleDraft = selectedPoles[assignment.pole_id];
+            for (const memberId of poleDraft.memberIds) {
+              if ((poleDraft.memberModes?.[memberId] ?? "direct") !== "solicited") continue;
+              const selectedKeys = poleDraft.memberSlotIds?.[memberId] ?? v.serviceSlots.map((item) => item.key);
+              const serviceSlotIds = v.serviceSlots.flatMap((slot, slotIndex) => {
+                if (!selectedKeys.includes(slot.key)) return [];
+                const savedSlot = (slotIns.data ?? []).find((saved: any) => saved.position === slotIndex);
+                return savedSlot ? [savedSlot.id] : [];
+              });
+              if (!serviceSlotIds.length) throw new Error("Sélectionne au moins un créneau pour chaque personne sollicitée dans le mode créneau par créneau.");
+              const { error } = await db.rpc("solicit_program_member_for_slots", {
+                p_assignment_id: assignment.id,
+                p_member_id: memberId,
+                p_service_slot_ids: serviceSlotIds,
+              });
+              if (error) throw error;
+            }
+          }
         }
       }
       await uploadFiles(id);
