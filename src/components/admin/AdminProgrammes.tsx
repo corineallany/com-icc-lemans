@@ -899,20 +899,16 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
               </Field>
               <ProgramServiceSlotsEditor
                 enabled={draft.detailed_scheduling}
-                selectionMode={draft.slot_selection_mode}
                 slots={draft.serviceSlots}
                 dates={dateRange(draft.start_date, draft.end_date || draft.start_date)}
-                poles={activePoles}
-                members={allMembers.filter((m: any) => m.status === "active" && !m.archived)}
-                links={links as any}
                 onEnabledChange={(detailed_scheduling) =>
                   setDraft({ ...draft, detailed_scheduling })
                 }
-                onSelectionModeChange={(slot_selection_mode) =>
-                  setDraft({ ...draft, slot_selection_mode })
-                }
                 onChange={(serviceSlots) => setDraft({ ...draft, serviceSlots })}
               />
+              <p className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 text-sm text-muted-foreground">
+                Les modalités de mobilisation (sélection globale du programme ou créneau par créneau), les réponses des membres et les affectations se gèrent dans la fiche détaillée du programme, onglet « Participation & besoins ». Vous pourrez les modifier après la création, selon vos droits.
+              </p>
               <section>
                 <h3 className="mb-2 font-black text-icc-violet">Pôles et membres mobilisés</h3>
                 <p className="mb-3 text-xs text-muted-foreground">
