@@ -78,6 +78,30 @@ export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isSta
     onError: (e: any) => toast.error(e.message),
   });
 
+  const submitAvailability = useMutation({
+    mutationFn: async () => {
+      if (!memberId || !selectedIds.size) throw new Error("Sélectionne au moins un créneau avant d’envoyer tes disponibilités.");
+      const { error } = await (supabase as any).rpc("respond_to_program_solicitation", {
+        p_program_id: programId,
+        p_status: "partial",
+        p_note: "Créneaux sélectionnés : " + data.data!.slots
+          .filter((slot: any) => selectedIds.has(slot.id))
+          .map((slot: any) => {
+            const date = dayLabel(data.data!.days.find((d: any) => d.id === slot.program_day_id)?.service_date);
+            return date + " " + slot.start_time + "–" + slot.end_time;
+          }).join(", "),
+      });
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      for (const key of ["program-member-slot-chooser", "program-responses", "program-sheet-participation-modes", "program-responses-summary", "notifications"]) {
+        await qc.invalidateQueries({ queryKey: [key, programId] });
+      }
+      toast.success("Tes disponibilités ont été envoyées au responsable.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible d’envoyer tes disponibilités."),
+  });
+
   const assignChoice = useMutation({
     mutationFn: async ({ choice, assignmentId }: { choice: any; assignmentId: string }) => {
       if (!isStaff || !data.data) throw new Error("Action réservée aux responsables autorisés.");
@@ -99,14 +123,6 @@ export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isSta
       const existing = data.data.participation.find((p: any) => p.assignment_id === assignmentId && p.member_id === choice.member_id);
       let assignmentMemberId = existing?.id;
       if (existing?.assignment_mode === "solicited" && existing.process_status !== "covered") {
-        // Choosing one or more slots is a partial availability response.
-        // Save that response first because the confirmation RPC requires it.
-        const { error: responseError } = await db.rpc("respond_to_program_solicitation", {
-          p_program_id: programId,
-          p_status: "partial",
-          p_note: "Disponibilités indiquées via les créneaux sélectionnés.",
-        });
-        if (responseError) throw responseError;
         const { error } = await db.rpc("confirm_program_solicitation", { p_assignment_member_id: existing.id });
         if (error) throw error;
       } else if (!existing) {
@@ -183,7 +199,14 @@ export function ProgramMemberSlotChooser({ programId, memberId, canChoose, isSta
           ) : (
             <p className="text-sm text-muted-foreground">Aucun créneau correspondant à un pôle pour lequel tu es sollicité ou mobilisé n’est disponible pour le moment.</p>
           )}
-          {selectedIds.size ? <p className="mt-3 text-xs font-semibold text-icc-violet">{selectedIds.size} créneau(x) sélectionné(s).</p> : null}
+          {selectedIds.size ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <p className="text-xs font-semibold text-icc-violet">{selectedIds.size} créneau(x) sélectionné(s).</p>
+              <Button size="sm" disabled={submitAvailability.isPending} onClick={() => submitAvailability.mutate()}>
+                {submitAvailability.isPending ? "Envoi…" : "Envoyer mes disponibilités"}
+              </Button>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
