@@ -389,7 +389,16 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         start_time: v.start_time || null,
         end_date: v.end_date || null,
         end_time: v.end_time || null,
-        response_deadline: v.response_deadline || null,
+        response_deadline: (() => {
+          if (deadlineOffset === null) return v.response_deadline || null;
+          const starts = v.response_deadline_anchor === "slot" && v.serviceSlots.length
+            ? v.serviceSlots.map((slot) => new Date(`${slot.service_date}T${slot.start_time || "00:00"}:00`).getTime() - deadlineOffset * (v.response_deadline_offset_unit === "days" ? 86400000 : 3600000))
+            : [new Date(`${v.start_date}T${v.start_time || "00:00"}:00`).getTime() - deadlineOffset * (v.response_deadline_offset_unit === "days" ? 86400000 : 3600000)];
+          const earliest = Math.min(...starts);
+          if (!Number.isFinite(earliest)) return null;
+          const d = new Date(earliest);
+          return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+        })(),
         response_deadline_offset_value: deadlineOffset,
         response_deadline_offset_unit: deadlineOffset === null ? null : v.response_deadline_offset_unit,
         response_deadline_anchor: deadlineOffset === null ? null : v.response_deadline_anchor,
