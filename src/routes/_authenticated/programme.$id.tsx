@@ -716,9 +716,13 @@ function ProgramSheet() {
                               </p>
                             </div>
                             {isStaff ? (
-                              <div className="flex flex-wrap gap-1">
-                                <Button size="sm" variant={location === "onsite" ? "default" : "outline"} onClick={() => setTeamLocation.mutate({memberId:r.member_id,location:"onsite"})}>Sur place</Button>
-                                <Button size="sm" variant={location === "travel" ? "default" : "outline"} onClick={() => setTeamLocation.mutate({memberId:r.member_id,location:"travel"})}>En déplacement</Button>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {hasTravel ? (
+                                  <label className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                    <input type="checkbox" checked={teamLocation(r.member_id) === "travel"} onChange={(e) => setTeamLocation.mutate({memberId:r.member_id,location:e.target.checked ? "travel" : "onsite"})} />
+                                    En déplacement
+                                  </label>
+                                ) : <Badge variant="secondary">Sur place</Badge>}
                               </div>
                             ) : null}
                           </div>
