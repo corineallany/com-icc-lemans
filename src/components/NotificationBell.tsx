@@ -84,7 +84,7 @@ export function NotificationBell() {
     if (n.entity_type === "program" && n.entity_id) {
       const base = `/programme/${n.entity_id}`;
       if (n.type === "reponse_attendue" || /sollicitation|réponse attendue/i.test(`${n.type ?? ""} ${n.title ?? ""}`)) return `${base}?tab=infos#program-response`;
-      if (/besoin|renfort|pôle ouvert|participation ouverte/i.test(`${n.type ?? ""} ${n.title ?? ""} ${n.body ?? ""}`)) return `${base}?tab=participation`;
+      if (/besoin|renfort|pôle ouvert|participation ouverte|proposition|a accepté|a refusé/i.test(`${n.type ?? ""} ${n.title ?? ""} ${n.body ?? ""}`) || !/modification|création|annul|report/i.test(`${n.type ?? ""} ${n.title ?? ""}`)) return `${base}?tab=participation`;
     }
     return link;
   }
