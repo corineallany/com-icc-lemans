@@ -302,6 +302,18 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     );
   const totalRequired = displayNeeds.reduce((sum: number, need: any) => sum + Number(need.required_count || 0), 0);
   const totalCovered = displayNeeds.reduce((sum: number, need: any) => sum + coveredCountForNeedDisplay(need, need.service_slot_id), 0);
+  const activeSolicitations = (modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered");
+  const expectedResponses = activeSolicitations.filter((x: any) => !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length
+    + (proposals.data ?? []).filter((p: any) => p.status === "pending").length;
+  const refusalCount = (proposals.data ?? []).filter((p: any) => p.status === "refused").length
+    + activeSolicitations.filter((x: any) => responseMap.get(x.member_id) === "unavailable").length;
+  const withdrawalCount = (proposals.data ?? []).filter((p: any) => p.status === "withdrawn").length
+    + (modes.data ?? []).filter((x: any) => x.process_status === "covered" && x.process_closed_reason === "Affectation retirée").length;
+  const supportRows = supportRequests.data ?? [];
+  const pendingSupportCount = supportRows.filter((x: any) => x.status === "pending").length;
+  const completedSupportCount = supportRows.filter((x: any) => ["accepted", "covered", "completed", "fulfilled"].includes(String(x.status).toLowerCase())).length;
+  const pendingReinforcementCount = supportRows.filter((x: any) => x.nature !== "replacement" && x.status === "pending").length;
+  const pendingReplacementCount = supportRows.filter((x: any) => x.nature === "replacement" && x.status === "pending").length;
 
   const deadlineForSlot = (slotId: string) => {
     const slot = (serviceSlots.data ?? []).find((s: any) => s.id === slotId);
@@ -771,11 +783,11 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       </div>
 
       {isStaff ? (
-        <div className="grid gap-3 rounded-lg border border-red-200 bg-red-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 dark:border-red-900 dark:bg-red-950/20">
-          <div><p className="text-xs text-muted-foreground">Besoin initial par créneau</p><p className="text-xl font-black">{totalRequired}</p></div>
-          <div><p className="text-xs text-muted-foreground">Places couvertes</p><p className="text-xl font-black">{totalCovered}</p></div>
-          <div><p className="text-xs text-muted-foreground">À couvrir</p><p className="text-xl font-black">{Math.max(0, totalRequired - totalCovered)}</p></div>
-          <div><p className="text-xs text-muted-foreground">Réponses en attente</p><p className="text-xl font-black">{(modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered" && !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length + (proposals.data ?? []).filter((p: any) => p.status === "pending").length}</p></div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-red-200 bg-red-50/70 p-2.5 dark:border-red-900 dark:bg-red-950/20 sm:grid-cols-4">
+          <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Besoins · initial</p><p className="text-lg font-black leading-tight">{totalRequired}</p><p className="text-[11px] leading-tight text-muted-foreground">{totalCovered} couverts · <span className={totalRequired > totalCovered ? "font-bold text-red-700 dark:text-red-300" : ""}>{Math.max(0, totalRequired - totalCovered)} à couvrir</span></p></div>
+          <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Réponses attendues</p><p className="text-lg font-black leading-tight">{expectedResponses}</p><p className="text-[11px] leading-tight text-muted-foreground">{refusalCount} refus · {withdrawalCount} désistement(s)</p></div>
+          <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Demandes en attente</p><p className="text-lg font-black leading-tight">{pendingSupportCount}</p><p className="text-[11px] leading-tight text-muted-foreground">{pendingReinforcementCount} renfort(s) · {pendingReplacementCount} remplacement(s)</p></div>
+          <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Demandes comblées</p><p className="text-lg font-black leading-tight">{completedSupportCount}</p><p className="text-[11px] leading-tight text-muted-foreground">Renforts / remplacements traités</p></div>
         </div>
       ) : null}
 
