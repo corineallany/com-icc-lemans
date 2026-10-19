@@ -273,11 +273,12 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const displayNeeds = (serviceSlots.data ?? []).length
     ? slotNeeds.data ?? []
     : assignments
-        .filter((assignment) => Number(assignment.required_count || 0) > 0)
         .map((assignment) => ({
           assignment_id: assignment.id,
           service_slot_id: legacySlotId,
-          required_count: Number(assignment.required_count || 0),
+          // Older programme records may not have stored a headcount. Keep
+          // them usable with a one-person default that staff can edit.
+          required_count: Math.max(1, Number(assignment.required_count || 1)),
           is_legacy: true,
         }));
   const coveredCountForNeedDisplay = (need: any, slotId: string) => {
