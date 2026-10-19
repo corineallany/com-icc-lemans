@@ -191,6 +191,20 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
+  const assignmentMemberSlots = useQuery({
+    queryKey: ["program-staffing-member-slots", programId, (modes.data ?? []).map((x: any) => x.id).sort().join(",")],
+    enabled: (modes.data ?? []).length > 0,
+    queryFn: async () => {
+      const ids = (modes.data ?? []).map((x: any) => x.id);
+      if (!ids.length) return [];
+      const { data, error } = await (supabase as any).from("program_assignment_member_slots")
+        .select("assignment_member_id,service_slot_id")
+        .in("assignment_member_id", ids);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const names = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members]);
   const activeMembers = useMemo(() => members.filter((m) => m.status === "active" && !m.deleted && !m.archived), [members]);
   const poleNames = useMemo(() => new Map(poles.map((p) => [p.id, p.name])), [poles]);
@@ -663,9 +677,9 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               </div>
             ) : null}
 
-            {isStaff && !covered ? (
+            {isStaff && (!covered || confirmed.length > 0) ? (
               <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-                <Button size="sm" onClick={() => openSupportRequest(a.id, "reinforcement")}>Demander un renfort</Button>
+                {!covered ? <Button size="sm" onClick={() => openSupportRequest(a.id, "reinforcement")}>Demander un renfort</Button> : null}
                 {confirmed.map((x: any) => (
                   <Button key={`replace-${x.id}`} size="sm" variant="outline" onClick={() => openSupportRequest(a.id, "replacement", "", x.member_id)}>
                     Demander le remplacement de {names.get(x.member_id) ?? "la personne affectée"}
