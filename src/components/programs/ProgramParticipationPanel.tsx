@@ -66,6 +66,10 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   } | null>(null);
   const [requestPoleId, setRequestPoleId] = useState("");
   const [needEdits, setNeedEdits] = useState<Record<string, string>>({});
+  const [globalDeadlineValue, setGlobalDeadlineValue] = useState<string | null>(null);
+  const [globalDeadlineUnit, setGlobalDeadlineUnit] = useState<"hours" | "days" | null>(null);
+  const [globalDeadlineAnchor, setGlobalDeadlineAnchor] = useState<"program" | "slot" | null>(null);
+  const [slotDeadlineEdits, setSlotDeadlineEdits] = useState<Record<string, { enabled: boolean; value: string; unit: "hours" | "days"; anchor: "program" | "slot" }>>({});
 
   const programConfig = useQuery({
     queryKey: ["program-slot-config", programId],
@@ -412,6 +416,88 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
+  const saveGlobalDeadline = useMutation({
+    mutationFn: async () => {
+      if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
+      const program = programInfo.data;
+      if (!program?.start_date) throw new Error("La date du programme est manquante.");
+      const raw = globalDeadlineValue ?? (program.response_deadline_offset_value == null ? "" : String(program.response_deadline_offset_value));
+      const unit = globalDeadlineUnit ?? (program.response_deadline_offset_unit === "days" ? "days" : "hours");
+      const anchor = globalDeadlineAnchor ?? (program.response_deadline_anchor === "slot" ? "slot" : "program");
+      if (raw === "") {
+        const { error } = await (supabase as any).from("programs").update({
+          response_deadline_offset_value: null, response_deadline_offset_unit: null,
+          response_deadline_anchor: null, response_deadline_at: null, response_deadline: null,
+        }).eq("id", programId);
+        if (error) throw error;
+        return;
+      }
+      const offset = Number(raw);
+      if (!Number.isInteger(offset) || offset < 1) throw new Error("Le délai doit être un nombre entier positif.");
+      if (anchor === "slot" && !(serviceSlots.data ?? []).length) throw new Error("Ajoute d’abord au moins un créneau pour calculer une échéance par créneau.");
+      const bases = anchor === "slot"
+        ? (serviceSlots.data ?? []).map((slot: any) => new Date(`${slot.service_date}T${slot.start_time || "00:00"}:00`).getTime())
+        : [new Date(`${program.start_date}T${program.start_time || "00:00"}:00`).getTime()];
+      if (bases.some((base: number) => !Number.isFinite(base))) throw new Error("Impossible de calculer l’échéance avec les dates et horaires actuels.");
+      const earliest = Math.min(...bases.map((base: number) => base - offset * (unit === "days" ? 86400000 : 3600000)));
+      const deadlineAt = new Date(earliest);
+      const deadlineDate = [deadlineAt.getFullYear(), String(deadlineAt.getMonth() + 1).padStart(2, "0"), String(deadlineAt.getDate()).padStart(2, "0")].join("-");
+      const { error } = await (supabase as any).from("programs").update({
+        response_deadline_offset_value: offset, response_deadline_offset_unit: unit,
+        response_deadline_anchor: anchor, response_deadline_at: deadlineAt.toISOString(),
+        response_deadline: deadlineDate,
+      }).eq("id", programId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["program-staffing-info", programId] });
+      await qc.invalidateQueries({ queryKey: ["programs"] });
+      toast.success("Délai général de réponse mis à jour.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible d’enregistrer le délai."),
+  });
+
+  const saveSlotDeadline = useMutation({
+    mutationFn: async (slotId: string) => {
+      if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
+      const slot = (serviceSlots.data ?? []).find((s: any) => s.id === slotId);
+      if (!slot) throw new Error("Créneau introuvable.");
+      const edit = slotDeadlineEdits[slotId] ?? {
+        enabled: slot.response_deadline_offset_value != null,
+        value: slot.response_deadline_offset_value == null ? "" : String(slot.response_deadline_offset_value),
+        unit: slot.response_deadline_offset_unit === "days" ? "days" : "hours",
+        anchor: slot.response_deadline_anchor === "program" ? "program" : "slot",
+      };
+      if (!edit.enabled) {
+        const { error } = await (supabase as any).from("program_service_slots").update({
+          response_deadline_offset_value: null, response_deadline_offset_unit: null,
+          response_deadline_anchor: null, response_deadline_at: null,
+        }).eq("id", slotId);
+        if (error) throw error;
+        return;
+      }
+      const offset = Number(edit.value);
+      if (!Number.isInteger(offset) || offset < 1) throw new Error("Le délai propre au créneau doit être un nombre entier positif.");
+      const program = programInfo.data;
+      const date = edit.anchor === "program" ? program?.start_date : slot.service_date;
+      const time = edit.anchor === "program" ? (program?.start_time || "00:00") : (slot.start_time || "00:00");
+      if (!date) throw new Error("La date de référence de cette échéance est manquante.");
+      const base = new Date(`${date}T${time}:00`).getTime();
+      if (!Number.isFinite(base)) throw new Error("Impossible de calculer l’échéance de ce créneau.");
+      const deadlineAt = new Date(base - offset * (edit.unit === "days" ? 86400000 : 3600000));
+      const { error } = await (supabase as any).from("program_service_slots").update({
+        response_deadline_offset_value: offset, response_deadline_offset_unit: edit.unit,
+        response_deadline_anchor: edit.anchor, response_deadline_at: deadlineAt.toISOString(),
+      }).eq("id", slotId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["program-staffing-slots", programId] });
+      toast.success("Délai du créneau mis à jour.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible d’enregistrer le délai du créneau."),
+  });
+
   const updateStaffingNeed = useMutation({
     mutationFn: async ({ assignmentId, slotId, count }: { assignmentId: string; slotId: string; count: number }) => {
       if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
@@ -550,6 +636,66 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           isStaff={isStaff}
           members={members}
         />
+      ) : null}
+
+      {isStaff && programInfo.data ? (
+        <div className="space-y-3 rounded-lg border bg-background p-3">
+          <div>
+            <h4 className="font-bold">Délais de réponse</h4>
+            <p className="text-xs text-muted-foreground">Configure-les ici, sans règle automatique imposée à tous les programmes. Le délai peut être calculé avant le début du programme ou avant chaque créneau.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-4">
+            <label className="space-y-1 text-xs font-semibold">Nombre
+              <Input type="number" min={1} step={1} placeholder="Ex. 48" value={globalDeadlineValue ?? (programInfo.data.response_deadline_offset_value == null ? "" : String(programInfo.data.response_deadline_offset_value))} onChange={(e) => setGlobalDeadlineValue(e.target.value)} />
+            </label>
+            <label className="space-y-1 text-xs font-semibold">Unité
+              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={globalDeadlineUnit ?? (programInfo.data.response_deadline_offset_unit === "days" ? "days" : "hours")} onChange={(e) => setGlobalDeadlineUnit(e.target.value as "hours" | "days")}>
+                <option value="hours">Heures</option><option value="days">Jours</option>
+              </select>
+            </label>
+            <label className="space-y-1 text-xs font-semibold sm:col-span-2">Calculer avant
+              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={globalDeadlineAnchor ?? (programInfo.data.response_deadline_anchor === "slot" ? "slot" : "program")} onChange={(e) => setGlobalDeadlineAnchor(e.target.value as "program" | "slot")}>
+                <option value="program">Le début du programme</option><option value="slot">Le début de chaque créneau</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">{programInfo.data.response_deadline_at ? `Échéance calculée actuellement : ${new Date(programInfo.data.response_deadline_at).toLocaleString("fr-FR")}` : "Aucun délai général enregistré."}</p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={saveGlobalDeadline.isPending} onClick={() => { setGlobalDeadlineValue(""); saveGlobalDeadline.mutate(); }}>Supprimer le délai général</Button>
+              <Button size="sm" disabled={saveGlobalDeadline.isPending} onClick={() => saveGlobalDeadline.mutate()}>{saveGlobalDeadline.isPending ? "Enregistrement…" : "Enregistrer le délai général"}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isStaff && (serviceSlots.data ?? []).length ? (
+        <div className="space-y-3 rounded-lg border bg-background p-3">
+          <h4 className="font-bold">Délais personnalisés par créneau</h4>
+          <p className="text-xs text-muted-foreground">Un créneau sans délai personnalisé hérite du délai général. Tu peux définir une exception par créneau ou rétablir l’héritage.</p>
+          {(serviceSlots.data ?? []).map((slot: any) => {
+            const edit = slotDeadlineEdits[slot.id] ?? {
+              enabled: slot.response_deadline_offset_value != null,
+              value: slot.response_deadline_offset_value == null ? "" : String(slot.response_deadline_offset_value),
+              unit: slot.response_deadline_offset_unit === "days" ? "days" : "hours",
+              anchor: slot.response_deadline_anchor === "program" ? "program" : "slot",
+            };
+            const updateEdit = (patch: Partial<typeof edit>) => setSlotDeadlineEdits((prev) => ({ ...prev, [slot.id]: { ...edit, ...patch } }));
+            return <div key={slot.id} className="rounded-md border p-3">
+              <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div>
+              <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={edit.enabled} onChange={(e) => updateEdit({ enabled: e.target.checked })} /> Personnaliser le délai de ce créneau</label>
+              {edit.enabled ? <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                <Input type="number" min={1} step={1} placeholder="Nombre" value={edit.value} onChange={(e) => updateEdit({ value: e.target.value })} />
+                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={edit.unit} onChange={(e) => updateEdit({ unit: e.target.value as "hours" | "days" })}><option value="hours">Heures</option><option value="days">Jours</option></select>
+                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={edit.anchor} onChange={(e) => updateEdit({ anchor: e.target.value as "program" | "slot" })}><option value="program">Avant le programme</option><option value="slot">Avant ce créneau</option></select>
+              </div> : <p className="mt-1 text-xs text-muted-foreground">Délai général hérité.</p>}
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs text-muted-foreground">{slot.response_deadline_at ? `Échéance enregistrée : ${new Date(slot.response_deadline_at).toLocaleString("fr-FR")}` : "Aucune échéance propre à ce créneau."}</span>
+                <Button size="sm" variant="outline" disabled={saveSlotDeadline.isPending} onClick={() => saveSlotDeadline.mutate(slot.id)}>{saveSlotDeadline.isPending ? "Enregistrement…" : edit.enabled ? "Enregistrer ce délai" : "Rétablir le délai général"}</Button>
+              </div>
+            </div>;
+          })}
+        </div>
       ) : null}
 
       {isStaff ? (
