@@ -638,10 +638,11 @@ function Sollicitations() {
         }
       }
       const next = recs(r.solicitation_id).map((x) => (x.id === r.id ? { ...x, ...patch } : x));
-      await (supabase as any)
+      const { error: statusError } = await (supabase as any)
         .from("solicitations")
         .update({ status: aggregate(next), decision_at: new Date().toISOString() })
         .eq("id", r.solicitation_id);
+      if (statusError) throw statusError;
       await logAction({
         action: old === "pending" ? "reponse_sollicitation" : "reponse_sollicitation_modifiee",
         entity: "solicitation",
