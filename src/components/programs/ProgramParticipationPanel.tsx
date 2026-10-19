@@ -4,6 +4,15 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentRole } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ProgramMemberSlotChooser } from "@/components/programs/ProgramMemberSlotChooser";
@@ -40,6 +49,17 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const [note, setNote] = useState<Record<string, string>>({});
   const [direct, setDirect] = useState<Record<string, string>>({});
   const [solicit, setSolicit] = useState<Record<string, string>>({});
+  const [requestDraft, setRequestDraft] = useState<{
+    assignmentId: string;
+    nature: "reinforcement" | "replacement";
+    slotId: string;
+    memberIds: string[];
+    mission: string;
+    count: string;
+    deadlineAt: string;
+    replacementMemberId: string;
+  } | null>(null);
+  const [requestPoleId, setRequestPoleId] = useState("");
 
   const programConfig = useQuery({
     queryKey: ["program-slot-config", programId],
@@ -51,6 +71,51 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         .single();
       if (error) throw error;
       return data;
+    },
+  });
+
+  const programInfo = useQuery({
+    queryKey: ["program-staffing-info", programId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("programs")
+        .select("id,title,start_date,start_time,response_deadline,response_deadline_at")
+        .eq("id", programId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const serviceSlots = useQuery({
+    queryKey: ["program-staffing-slots", programId],
+    queryFn: async () => {
+      const t = supabase as any;
+      const { data: slots, error } = await t.from("program_service_slots")
+        .select("id,program_day_id,label,start_time,end_time,response_deadline_at,response_deadline_offset_value,response_deadline_offset_unit,response_deadline_anchor")
+        .eq("program_id", programId).order("position");
+      if (error) throw error;
+      const dayIds = [...new Set((slots ?? []).map((s: any) => s.program_day_id))];
+      const { data: days, error: dayError } = dayIds.length
+        ? await t.from("program_days").select("id,service_date").in("id", dayIds)
+        : { data: [], error: null };
+      if (dayError) throw dayError;
+      const dayById = new Map((days ?? []).map((d: any) => [d.id, d.service_date]));
+      return (slots ?? []).map((s: any) => ({ ...s, service_date: dayById.get(s.program_day_id) ?? null }));
+    },
+  });
+
+  const slotNeeds = useQuery({
+    queryKey: ["program-staffing-needs", programId, assignments.map((a) => a.id).sort().join(",")],
+    enabled: assignments.length > 0,
+    queryFn: async () => {
+      const slotIds = (serviceSlots.data ?? []).map((s: any) => s.id);
+      if (!slotIds.length) return [];
+      const { data, error } = await (supabase as any).from("program_assignment_slot_needs")
+        .select("assignment_id,service_slot_id,required_count")
+        .in("assignment_id", assignments.map((a) => a.id)).in("service_slot_id", slotIds);
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -127,6 +192,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   });
 
   const names = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members]);
+  const activeMembers = useMemo(() => members.filter((m) => m.status === "active" && !m.deleted && !m.archived), [members]);
   const poleNames = useMemo(() => new Map(poles.map((p) => [p.id, p.name])), [poles]);
   const responseMap = useMemo(
     () => new Map((responses.data ?? []).map((r: any) => [r.member_id, r.status])),
@@ -286,6 +352,91 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
+  const createSupportRequest = useMutation({
+    mutationFn: async () => {
+      const draft = requestDraft;
+      if (!draft) throw new Error("Choisis un besoin à traiter.");
+      if (!member?.id) throw new Error("Ton compte doit être lié à un membre.");
+      if (!requestPoleId) throw new Error("Choisis le pôle qui recevra le renfort.");
+      if (!draft.mission.trim()) throw new Error("Précise la mission à réaliser.");
+      if (!draft.memberIds.length) throw new Error("Sélectionne au moins un membre à solliciter.");
+      const slot = (serviceSlots.data ?? []).find((s: any) => s.id === draft.slotId);
+      const program = programInfo.data;
+      if (!program) throw new Error("Impossible de retrouver le programme.");
+      const deadlineAt = draft.deadlineAt ? new Date(draft.deadlineAt) : null;
+      if (deadlineAt && Number.isNaN(deadlineAt.getTime())) throw new Error("La date limite est invalide.");
+      const id = `sp_${crypto.randomUUID()}`;
+      const targetId = `target_${crypto.randomUUID()}`;
+      const targetName = poleNames.get(requestPoleId) ?? "Pôle";
+      const deadlineIso = deadlineAt?.toISOString() ?? null;
+      const deadlineDate = deadlineAt ? deadlineAt.toISOString().slice(0, 10) : (slot?.service_date ?? program.start_date ?? null);
+      const payload: any = {
+        id,
+        requester: member.full_name,
+        requester_member_id: member.id,
+        created_by: (await supabase.auth.getUser()).data.user?.id ?? null,
+        event_name: program.title,
+        event_date: slot?.service_date ?? program.start_date,
+        message: draft.mission.trim(),
+        mode: "programme",
+        status: "pending",
+        target_type: "pole",
+        target_name: targetName,
+        target_pole_id: requestPoleId,
+        requested_pole_id: requestPoleId,
+        program_id: programId,
+        replacement_member_id: draft.nature === "replacement" ? (draft.replacementMemberId || null) : null,
+        nature: draft.nature,
+        response_deadline: deadlineDate,
+        response_deadline_at: deadlineIso,
+        request_mission: draft.mission.trim(),
+        request_count: draft.nature === "replacement" ? 1 : Math.max(1, Number(draft.count) || 1),
+        request_slot_id: slot?.id ?? null,
+        slot_selection_mode: "organizer",
+        offered_slot_ids: slot?.id ? [slot.id] : [],
+      };
+      const { error: insertError } = await (supabase as any).from("solicitations").insert(payload);
+      if (insertError) throw insertError;
+      const { error: targetError } = await (supabase as any).from("solicitation_targets").insert({
+        id: targetId, solicitation_id: id, target_type: "pole", target_id: requestPoleId,
+        target_name: targetName, need: draft.mission.trim(),
+        required_count: draft.nature === "replacement" ? 1 : Math.max(1, Number(draft.count) || 1),
+      });
+      if (targetError) throw targetError;
+      const recipientRows = draft.memberIds.map((member_id) => ({
+        solicitation_id: id, recipient_type: "member", member_id, response: "pending", target_id: targetId,
+      }));
+      const { error: recipientsError } = await (supabase as any).from("solicitation_recipients").insert(recipientRows);
+      if (recipientsError) throw recipientsError;
+      const { error: mappingError } = await (supabase as any).from("solicitation_recipient_targets").insert(
+        draft.memberIds.map((member_id) => ({ solicitation_id: id, member_id, target_id: targetId })),
+      );
+      if (mappingError) throw mappingError;
+      return id;
+    },
+    onSuccess: async () => {
+      setRequestDraft(null);
+      setRequestPoleId("");
+      for (const queryKey of [["solicitations"], ["solicitation-targets"], ["solicitation-recipients"], ["programs"], ["notifications"]]) {
+        await qc.invalidateQueries({ queryKey });
+      }
+      toast.success("Demande créée dans Demandes ponctuelles avec les informations du programme.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible de créer la demande."),
+  });
+
+  const openSupportRequest = (assignmentId: string, nature: "reinforcement" | "replacement", slotId = "", replacementMemberId = "") => {
+    const slot = (serviceSlots.data ?? []).find((s: any) => s.id === slotId);
+    const program = programInfo.data;
+    const initialDeadline = slot?.response_deadline_at ?? program?.response_deadline_at ?? "";
+    const deadlineLocal = initialDeadline ? new Date(initialDeadline).toISOString().slice(0, 16) : "";
+    setRequestPoleId(assignments.find((a) => a.id === assignmentId)?.pole_id ?? "");
+    setRequestDraft({
+      assignmentId, nature, slotId, memberIds: [], mission: "",
+      count: "1", deadlineAt: deadlineLocal, replacementMemberId,
+    });
+  };
+
   const withdraw = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await (supabase as any).rpc("withdraw_program_proposal", {
@@ -315,6 +466,39 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           isStaff={isStaff}
           members={members}
         />
+      ) : null}
+
+      {isStaff ? (
+        <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-3">
+          <div><p className="text-xs text-muted-foreground">Pôles mobilisés</p><p className="text-xl font-black">{assignments.length}</p></div>
+          <div><p className="text-xs text-muted-foreground">Personnes affectées</p><p className="text-xl font-black">{new Set((modes.data ?? []).filter((x: any) => ["direct", "proposal"].includes(x.assignment_mode) && !["covered", "withdrawn", "refused"].includes(x.process_status)).map((x: any) => x.member_id)).size}</p></div>
+          <div><p className="text-xs text-muted-foreground">Réponses en attente</p><p className="text-xl font-black">{(modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered" && !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length + (proposals.data ?? []).filter((p: any) => p.status === "pending").length}</p></div>
+        </div>
+      ) : null}
+
+      {isStaff && (serviceSlots.data ?? []).length ? (
+        <div className="space-y-2 rounded-lg border bg-background p-3">
+          <h4 className="font-bold">Besoins par créneau</h4>
+          {(serviceSlots.data ?? []).map((slot: any) => {
+            const needs = (slotNeeds.data ?? []).filter((n: any) => n.service_slot_id === slot.id);
+            if (!needs.length) return null;
+            return <div key={slot.id} className="rounded-md bg-muted/30 p-2">
+              <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div>
+              {needs.map((need: any) => {
+                const assignment = assignments.find((x) => x.id === need.assignment_id);
+                if (!assignment) return null;
+                const linkedRows = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && ["direct", "proposal"].includes(m.assignment_mode) && !["covered", "withdrawn", "refused"].includes(m.process_status));
+                const linkedIds = (assignmentMemberSlots.data ?? []);
+                const slotCount = linkedRows.filter((row: any) => linkedIds.some((link: any) => link.assignment_member_id === row.id && link.service_slot_id === slot.id)).length;
+                const pendingCount = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && m.assignment_mode === "solicited" && m.process_status !== "covered").length;
+                return <div key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>{poleNames.get(assignment.pole_id) ?? "Pôle"} : <b>{slotCount}/{need.required_count}</b> affecté(s) · {Math.max(0, Number(need.required_count) - slotCount)} à couvrir{pendingCount ? ` · ${pendingCount} sollicitation(s) en attente` : ""}</span>
+                  <Button size="sm" variant="outline" onClick={() => openSupportRequest(assignment.id, "reinforcement", slot.id)}>Demander un renfort</Button>
+                </div>;
+              })}
+            </div>;
+          })}
+        </div>
       ) : null}
 
       {assignments.map((a) => {
@@ -480,6 +664,16 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
             ) : null}
 
             {isStaff && !covered ? (
+              <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+                <Button size="sm" onClick={() => openSupportRequest(a.id, "reinforcement")}>Demander un renfort</Button>
+                {confirmed.map((x: any) => (
+                  <Button key={`replace-${x.id}`} size="sm" variant="outline" onClick={() => openSupportRequest(a.id, "replacement", "", x.member_id)}>
+                    Demander le remplacement de {names.get(x.member_id) ?? "la personne affectée"}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            {isStaff && !covered ? (
               <div className="mt-3 grid gap-3 border-t pt-3 lg:grid-cols-2">
                 <div className="rounded-lg border bg-muted/20 p-3">
                   <p className="text-xs font-black">Affecter directement</p>
@@ -545,6 +739,67 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           </div>
         );
       })}
+      <Dialog open={!!requestDraft} onOpenChange={(open) => { if (!open) setRequestDraft(null); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{requestDraft?.nature === "replacement" ? "Demander un remplacement" : "Demander un renfort"}</DialogTitle>
+            <DialogDescription>
+              Les informations du programme sont reprises automatiquement. La demande sera créée dans « Demandes ponctuelles ».
+            </DialogDescription>
+          </DialogHeader>
+          {requestDraft ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-sm font-medium">Pôle dans lequel aider
+                  <select className="h-10 w-full rounded-md border bg-background px-3" value={requestPoleId} onChange={(e) => setRequestPoleId(e.target.value)}>
+                    {poles.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm font-medium">Créneau concerné
+                  <select className="h-10 w-full rounded-md border bg-background px-3" value={requestDraft.slotId} onChange={(e) => {
+                    const slot = (serviceSlots.data ?? []).find((s: any) => s.id === e.target.value);
+                    const deadline = slot?.response_deadline_at ?? programInfo.data?.response_deadline_at ?? "";
+                    setRequestDraft({ ...requestDraft, slotId: e.target.value, deadlineAt: deadline ? new Date(deadline).toISOString().slice(0,16) : requestDraft.deadlineAt });
+                  }}>
+                    <option value="">Tout le programme / aucun créneau précis</option>
+                    {(serviceSlots.data ?? []).map((s: any) => <option key={s.id} value={s.id}>{s.service_date ? new Date(`${s.service_date}T12:00:00`).toLocaleDateString("fr-FR") : ""} · {s.label || `${s.start_time}–${s.end_time}`}</option>)}
+                  </select>
+                </label>
+              </div>
+              {requestDraft.nature === "replacement" ? (
+                <div className="rounded-md bg-muted/40 p-3 text-sm">Personne à remplacer : <b>{names.get(requestDraft.replacementMemberId) ?? "Personne affectée"}</b></div>
+              ) : (
+                <label className="block space-y-1 text-sm font-medium">Nombre de personnes recherchées
+                  <Input type="number" min={1} value={requestDraft.count} onChange={(e) => setRequestDraft({ ...requestDraft, count: e.target.value })} />
+                </label>
+              )}
+              <label className="block space-y-1 text-sm font-medium">Mission à réaliser
+                <Textarea value={requestDraft.mission} onChange={(e) => setRequestDraft({ ...requestDraft, mission: e.target.value })} placeholder="Précise les tâches, le rôle attendu et les informations utiles." />
+              </label>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2"><b className="text-sm">Membres à solliciter</b><span className="text-xs text-muted-foreground">{requestDraft.memberIds.length} sélectionné(s)</span></div>
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                  {activeMembers.map((m: any) => <label key={m.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50">
+                    <input type="checkbox" checked={requestDraft.memberIds.includes(m.id)} onChange={(e) => setRequestDraft({ ...requestDraft, memberIds: e.target.checked ? [...requestDraft.memberIds, m.id] : requestDraft.memberIds.filter((id) => id !== m.id) })} />
+                    <span>{m.full_name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">{(m.poles ?? []).map((id: string) => poleNames.get(id)).filter(Boolean).join(", ")}</span>
+                  </label>)}
+                </div>
+              </div>
+              <label className="block space-y-1 text-sm font-medium">Date et heure limite de réponse
+                <Input type="datetime-local" value={requestDraft.deadlineAt} onChange={(e) => setRequestDraft({ ...requestDraft, deadlineAt: e.target.value })} />
+                <span className="text-xs font-normal text-muted-foreground">Préremplie depuis la règle du programme ou du créneau si elle existe ; modifiable ici.</span>
+              </label>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRequestDraft(null)}>Annuler</Button>
+            <Button disabled={createSupportRequest.isPending} onClick={() => createSupportRequest.mutate()}>
+              {createSupportRequest.isPending ? "Création…" : "Créer la demande ponctuelle"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
