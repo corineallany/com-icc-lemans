@@ -300,8 +300,6 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           link.assignment_member_id === row.id && link.service_slot_id === slotId
         ))
     );
-  const totalRequired = displayNeeds.reduce((sum: number, need: any) => sum + Number(need.required_count || 0), 0);
-  const totalCovered = displayNeeds.reduce((sum: number, need: any) => sum + coveredCountForNeedDisplay(need, need.service_slot_id), 0);
   const activeSolicitations = (modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered");
   const expectedResponses = activeSolicitations.filter((x: any) => !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length
     + (proposals.data ?? []).filter((p: any) => p.status === "pending").length;
@@ -783,8 +781,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       </div>
 
       {isStaff ? (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-red-200 bg-red-50/70 p-2.5 dark:border-red-900 dark:bg-red-950/20 sm:grid-cols-4">
-          <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Besoins · initial</p><p className="text-lg font-black leading-tight">{totalRequired}</p><p className="text-[11px] leading-tight text-muted-foreground">{totalCovered} couverts · <span className={totalRequired > totalCovered ? "font-bold text-red-700 dark:text-red-300" : ""}>{Math.max(0, totalRequired - totalCovered)} à couvrir</span></p></div>
+        <div className="grid grid-cols-3 gap-x-3 gap-y-2 rounded-lg border border-red-200 bg-red-50/70 p-2.5 dark:border-red-900 dark:bg-red-950/20">
           <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Réponses attendues</p><p className="text-lg font-black leading-tight">{expectedResponses}</p><p className="text-[11px] leading-tight text-muted-foreground">{refusalCount} refus · {withdrawalCount} désistement(s)</p></div>
           <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Demandes en attente</p><p className="text-lg font-black leading-tight">{pendingSupportCount}</p><p className="text-[11px] leading-tight text-muted-foreground">{pendingReinforcementCount} renfort(s) · {pendingReplacementCount} remplacement(s)</p></div>
           <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Demandes comblées</p><p className="text-lg font-black leading-tight">{completedSupportCount}</p><p className="text-[11px] leading-tight text-muted-foreground">Renforts / remplacements traités</p></div>
