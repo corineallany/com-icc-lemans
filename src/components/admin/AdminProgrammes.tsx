@@ -618,6 +618,10 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
             const savedSlot = (slotIns.data ?? []).find((saved: any) => saved.position === slotIndex);
             if (!savedSlot) return [];
             return poleDraft.memberIds.flatMap((memberId) => {
+              const memberMode = poleDraft.memberModes?.[memberId] ?? "direct";
+              // In global mobilisation, a solicited member chooses availability later;
+              // do not pre-link that person to every slot before they respond.
+              if (v.slot_selection_mode === "member" && memberMode === "solicited") return [];
               const selectedSlots = poleDraft.memberSlotIds?.[memberId] ?? v.serviceSlots.map((item) => item.key);
               if (!selectedSlots.includes(slot.key)) return [];
               const am = savedMembers.find(
@@ -906,8 +910,31 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                 }
                 onChange={(serviceSlots) => setDraft({ ...draft, serviceSlots })}
               />
-              <p className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 text-sm text-muted-foreground">
-                Tu peux toujours sélectionner ici les pôles et les personnes, puis choisir pour chaque personne « Solliciter » ou « Affecter directement ». Pour un programme avec plusieurs créneaux, le mode de mobilisation — les personnes sollicitées indiquent-elles leurs disponibilités sur le programme, ou le responsable choisit-il les créneaux ? — se règle après création dans la fiche du programme, onglet « Participation & besoins ». Ce réglage reste modifiable selon tes droits. Pour un programme simple sans créneaux détaillés, ce choix ne s’affiche pas.
+              {draft.detailed_scheduling && draft.serviceSlots.length > 0 ? (
+                <section className="space-y-2 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+                  <h3 className="font-black text-icc-violet">Mode de mobilisation</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Choisis dès maintenant comment les demandes seront organisées. Tu peux ensuite modifier ce réglage dans « Participation & besoins ».
+                  </p>
+                  <Select
+                    value={draft.slot_selection_mode}
+                    onValueChange={(value: "organizer" | "member") => setDraft({ ...draft, slot_selection_mode: value })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Mobilisation globale : les membres sollicités indiquent les créneaux où ils sont disponibles</SelectItem>
+                      <SelectItem value="organizer">Créneau par créneau : le responsable sollicite ou affecte sur des horaires précis</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {draft.slot_selection_mode === "member"
+                      ? "Les demandes « Solliciter » portent sur le programme et les membres choisissent leurs disponibilités. Les affectations sont confirmées ensuite dans la fiche du programme. Une affectation directe peut toujours être limitée à des créneaux précis."
+                      : "Pour chaque personne sollicitée ou affectée, sélectionne les créneaux concernés ci-dessous. Les demandes sont envoyées lors de l’enregistrement du programme."}
+                  </p>
+                </section>
+              ) : null}
+              <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                Tu peux toujours sélectionner les pôles, préciser les besoins par créneau, puis choisir les personnes à solliciter ou à affecter directement. Pour un programme simple sans créneaux détaillés, le fonctionnement reste inchangé : aucun mode de mobilisation supplémentaire n’est demandé.
               </p>
               <section>
                 <h3 className="mb-2 font-black text-icc-violet">Pôles et membres mobilisés</h3>
@@ -1051,7 +1078,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                       </label>
                                     ) : null}
                                   </div>
-                                  {draft.detailed_scheduling && draft.serviceSlots.length ? (
+                                  {draft.detailed_scheduling && draft.serviceSlots.length && !(draft.slot_selection_mode === "member" && mode === "solicited") ? (
                                     <div className="flex flex-wrap gap-x-4 gap-y-1">
                                       {draft.serviceSlots.map((slot, slotIndex) => (
                                         <label key={slot.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1277,7 +1304,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                           Affecter directement
                                         </Button>
                                       </div>
-                                      {draft.detailed_scheduling && draft.serviceSlots.length > 0 ? (
+                                      {draft.detailed_scheduling && draft.serviceSlots.length > 0 && !(draft.slot_selection_mode === "member" && (x.memberModes?.[m.id] ?? "direct") === "solicited") ? (
                                         <div className="flex flex-wrap gap-x-4 gap-y-1">
                                           {draft.serviceSlots.map((slot, slotIndex) => (
                                             <label key={slot.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
