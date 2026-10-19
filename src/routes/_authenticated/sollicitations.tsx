@@ -646,67 +646,75 @@ function Sollicitations() {
     if (!s.program_id) return;
     const memberId = r.member_id;
     if (s.nature === "replacement" || s.nature === "remplacement") {
-      const replacedId = s.requester_member_id;
-      const { data: assignments } = await (supabase as any)
-        .from("program_assignments")
-        .select("id")
-        .eq("program_id", s.program_id);
+      const replacedId = s.replacement_member_id ?? s.requester_member_id;
+      let assignmentQuery = (supabase as any).from("program_assignments").select("id,pole_id").eq("program_id", s.program_id);
+      if (s.target_pole_id) assignmentQuery = assignmentQuery.eq("pole_id", s.target_pole_id);
+      const { data: assignments, error: assignmentError } = await assignmentQuery;
+      if (assignmentError) throw assignmentError;
       const ids = (assignments ?? []).map((a: any) => a.id);
       if (ids.length && replacedId) {
-        const { data: oldLinks } = await (supabase as any)
-          .from("program_assignment_members")
-          .select("assignment_id")
-          .in("assignment_id", ids)
-          .eq("member_id", replacedId);
-        for (const link of oldLinks ?? [])
-          await (supabase as any)
-            .from("program_assignment_members")
-            .upsert(
-              { assignment_id: link.assignment_id, member_id: memberId },
-              { onConflict: "assignment_id,member_id" },
-            );
-        await (supabase as any)
-          .from("program_assignment_members")
-          .delete()
-          .in("assignment_id", ids)
-          .eq("member_id", replacedId);
+        const { data: oldLinks, error: oldLinksError } = await (supabase as any).from("program_assignment_members").select("id,assignment_id").in("assignment_id", ids).eq("member_id", replacedId);
+        if (oldLinksError) throw oldLinksError;
+        if (s.request_slot_id) {
+          const { data: slot, error: slotError } = await (supabase as any).from("program_service_slots").select("id,program_day_id,start_time,end_time").eq("id", s.request_slot_id).maybeSingle();
+          if (slotError) throw slotError;
+          for (const oldLink of oldLinks ?? []) {
+            const { data: oldSlotLink, error: oldSlotError } = await (supabase as any).from("program_assignment_member_slots").select("id").eq("assignment_member_id", oldLink.id).eq("service_slot_id", slot?.id).maybeSingle();
+            if (oldSlotError) throw oldSlotError;
+            if (!oldSlotLink || !slot) continue;
+            const { data: newLink, error: newLinkError } = await (supabase as any).from("program_assignment_members").upsert({ assignment_id: oldLink.assignment_id, member_id: memberId }, { onConflict: "assignment_id,member_id" }).select("id").single();
+            if (newLinkError) throw newLinkError;
+            const { error: slotInsertError } = await (supabase as any).from("program_assignment_member_slots").upsert({ assignment_member_id: newLink.id, program_day_id: slot.program_day_id, service_slot_id: slot.id, start_time: slot.start_time, end_time: slot.end_time }, { onConflict: "assignment_member_id,service_slot_id" });
+            if (slotInsertError) throw slotInsertError;
+            const { error: removeSlotError } = await (supabase as any).from("program_assignment_member_slots").delete().eq("id", oldSlotLink.id);
+            if (removeSlotError) throw removeSlotError;
+            const { data: remainingSlots, error: remainingError } = await (supabase as any).from("program_assignment_member_slots").select("id").eq("assignment_member_id", oldLink.id);
+            if (remainingError) throw remainingError;
+            if (!(remainingSlots ?? []).length) {
+              const { error: removeMemberError } = await (supabase as any).from("program_assignment_members").delete().eq("id", oldLink.id);
+              if (removeMemberError) throw removeMemberError;
+            }
+          }
+        } else {
+          for (const link of oldLinks ?? []) {
+            const { error: upsertError } = await (supabase as any).from("program_assignment_members").upsert({ assignment_id: link.assignment_id, member_id: memberId }, { onConflict: "assignment_id,member_id" });
+            if (upsertError) throw upsertError;
+          }
+          const { error: deleteError } = await (supabase as any).from("program_assignment_members").delete().in("assignment_id", ids).eq("member_id", replacedId);
+          if (deleteError) throw deleteError;
+        }
       }
     } else {
-      const tids = maps(s.id)
-        .filter((x) => x.member_id === memberId)
-        .map((x) => x.target_id);
-      const poleTarget = tgts(s.id).find(
-        (t) => tids.includes(t.id) && t.target_type === "pole" && t.target_id,
-      );
-      const poleId =
-        poleTarget?.target_id ?? links.find((l: any) => l.member_id === memberId)?.pole_id;
+      const tids = maps(s.id).filter((x) => x.member_id === memberId).map((x) => x.target_id);
+      const poleTarget = tgts(s.id).find((t) => tids.includes(t.id) && t.target_type === "pole" && t.target_id);
+      const poleId = s.target_pole_id ?? poleTarget?.target_id ?? links.find((l: any) => l.member_id === memberId)?.pole_id;
       if (poleId) {
-        const { data: existing } = await (supabase as any)
-          .from("program_assignments")
-          .select("id")
-          .eq("program_id", s.program_id)
-          .eq("pole_id", poleId)
-          .maybeSingle();
+        const { data: existing, error: existingError } = await (supabase as any).from("program_assignments").select("id").eq("program_id", s.program_id).eq("pole_id", poleId).maybeSingle();
+        if (existingError) throw existingError;
         let assignmentId = existing?.id;
         if (!assignmentId) {
-          const ins = await (supabase as any)
-            .from("program_assignments")
-            .insert({
-              program_id: s.program_id,
-              pole_id: poleId,
-              tasks: poleTarget?.need ?? "Renfort ponctuel",
-            })
-            .select("id")
-            .single();
+          const ins = await (supabase as any).from("program_assignments").insert({ program_id: s.program_id, pole_id: poleId, tasks: s.request_mission ?? poleTarget?.need ?? "Renfort ponctuel" }).select("id").single();
+          if (ins.error) throw ins.error;
           assignmentId = ins.data?.id;
         }
-        if (assignmentId)
-          await (supabase as any)
-            .from("program_assignment_members")
-            .upsert(
-              { assignment_id: assignmentId, member_id: memberId },
-              { onConflict: "assignment_id,member_id" },
-            );
+        if (assignmentId) {
+          const { data: assignmentMember, error: memberError } = await (supabase as any).from("program_assignment_members").upsert({ assignment_id: assignmentId, member_id: memberId }, { onConflict: "assignment_id,member_id" }).select("id").single();
+          if (memberError) throw memberError;
+          if (s.request_slot_id) {
+            const { data: slot, error: slotError } = await (supabase as any).from("program_service_slots").select("id,program_day_id,start_time,end_time").eq("id", s.request_slot_id).maybeSingle();
+            if (slotError) throw slotError;
+            if (slot) {
+              const { error: slotLinkError } = await (supabase as any).from("program_assignment_member_slots").upsert({ assignment_member_id: assignmentMember.id, program_day_id: slot.program_day_id, service_slot_id: slot.id, start_time: slot.start_time, end_time: slot.end_time }, { onConflict: "assignment_member_id,service_slot_id" });
+              if (slotLinkError) throw slotLinkError;
+              const { data: need, error: needError } = await (supabase as any).from("program_assignment_slot_needs").select("id").eq("assignment_id", assignmentId).eq("service_slot_id", slot.id).maybeSingle();
+              if (needError) throw needError;
+              if (!need) {
+                const { error: insertNeedError } = await (supabase as any).from("program_assignment_slot_needs").insert({ assignment_id: assignmentId, service_slot_id: slot.id, required_count: Math.max(1, Math.floor(Number(s.request_count) || 1)) });
+                if (insertNeedError) throw insertNeedError;
+              }
+            }
+          }
+        }
       }
     }
     const chosenIds = (slotChoices.data ?? [])
