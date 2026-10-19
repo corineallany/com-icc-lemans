@@ -482,6 +482,23 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
+  const saveParticipationMode = useMutation({
+    mutationFn: async (mode: "organizer" | "member") => {
+      if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
+      const { error } = await (supabase as any)
+        .from("programs")
+        .update({ slot_selection_mode: mode })
+        .eq("id", programId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["program-slot-config", programId] });
+      await qc.invalidateQueries({ queryKey: ["program-member-slot-chooser", programId] });
+      toast.success("Mode de mobilisation mis à jour.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible de modifier le mode de mobilisation."),
+  });
+
   const saveGlobalDeadline = useMutation({
     mutationFn: async () => {
       if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
@@ -785,6 +802,29 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         </div> : null}
       </div>
 
+      {isStaff && programConfig.data?.detailed_scheduling ? (
+        <section className="space-y-3 rounded-lg border border-violet-200 bg-background p-3">
+          <div>
+            <h4 className="font-bold">Mode de mobilisation</h4>
+            <p className="text-xs text-muted-foreground">
+              Choisis si les membres indiquent leurs disponibilités pour l’ensemble du programme ou si la mobilisation reste gérée créneau par créneau. Ce réglage est modifiable.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button type="button" disabled={saveParticipationMode.isPending} onClick={() => saveParticipationMode.mutate("member")} className={`rounded-lg border p-3 text-left text-sm ${programConfig.data.slot_selection_mode === "member" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
+              <b>Mobilisation globale du programme</b>
+              <span className="mt-1 block text-xs text-muted-foreground">Les personnes sollicitées choisissent les créneaux où elles sont disponibles. Le responsable confirme ensuite les affectations.</span>
+              {programConfig.data.slot_selection_mode === "member" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Mode sélectionné</span> : null}
+            </button>
+            <button type="button" disabled={saveParticipationMode.isPending} onClick={() => saveParticipationMode.mutate("organizer")} className={`rounded-lg border p-3 text-left text-sm ${programConfig.data.slot_selection_mode !== "member" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
+              <b>Mobilisation créneau par créneau</b>
+              <span className="mt-1 block text-xs text-muted-foreground">Le responsable sollicite ou affecte des personnes sur des créneaux précis. Les propositions spontanées restent possibles selon les besoins.</span>
+              {programConfig.data.slot_selection_mode !== "member" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Mode sélectionné</span> : null}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       {isStaff ? (
         <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-red-200 bg-red-50/70 p-2.5 dark:border-red-900 dark:bg-red-950/20 sm:grid-cols-4">
           <div className="min-w-0"><p className="text-[11px] leading-tight text-muted-foreground">Besoins · initial</p><p className="text-lg font-black leading-tight">{totalRequired}</p><p className="text-[11px] leading-tight text-muted-foreground">{totalCovered} couverts · <span className={totalRequired > totalCovered ? "font-bold text-red-700 dark:text-red-300" : ""}>{Math.max(0, totalRequired - totalCovered)} à couvrir</span></p></div>
@@ -1076,7 +1116,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               ))}
             </div>
 
-            {myPole && !covered && !confirmedIds.has(member?.id ?? "") && !mine ? (
+            {myPole && !covered && !confirmedIds.has(member?.id ?? "") && !mine && programConfig.data?.slot_selection_mode !== "member" ? (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <Textarea
                   className="min-h-9"
