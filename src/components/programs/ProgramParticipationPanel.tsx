@@ -541,6 +541,36 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           }
         }
       }
+      for (const assignment of assignments.filter((a) => selected.includes(a.pole_id))) {
+        const allSlots = serviceSlots.data ?? [];
+        if (!allSlots.length) continue;
+        const selectedSlots = poleSlotSelection[assignment.pole_id] ?? allSlots.map((slot: any) => slot.id);
+        const { data: currentNeeds, error: currentNeedsError } = await (supabase as any).from("program_assignment_slot_needs")
+          .select("service_slot_id").eq("assignment_id", assignment.id);
+        if (currentNeedsError) throw currentNeedsError;
+        const existingIds = new Set((currentNeeds ?? []).map((row: any) => row.service_slot_id));
+        const missing = allSlots.filter((slot: any) => selectedSlots.includes(slot.id) && !existingIds.has(slot.id))
+          .map((slot: any) => ({ assignment_id: assignment.id, service_slot_id: slot.id, required_count: 1 }));
+        if (missing.length) {
+          const { error } = await (supabase as any).from("program_assignment_slot_needs").insert(missing);
+          if (error) throw error;
+        }
+        for (const slotId of [...existingIds].filter((id) => !selectedSlots.includes(id))) {
+          const { data: linkedMembers, error: linkedMembersError } = await (supabase as any).from("program_assignment_members")
+            .select("id").eq("assignment_id", assignment.id);
+          if (linkedMembersError) throw linkedMembersError;
+          const ids = (linkedMembers ?? []).map((row: any) => row.id);
+          if (ids.length) {
+            const { data: links, error: linksError } = await (supabase as any).from("program_assignment_member_slots")
+              .select("assignment_member_id").in("assignment_member_id", ids).eq("service_slot_id", slotId);
+            if (linksError) throw linksError;
+            if ((links ?? []).length) throw new Error("Ce créneau est déjà associé à une personne. Retire d’abord cette participation avant de le désélectionner.");
+          }
+          const { error } = await (supabase as any).from("program_assignment_slot_needs")
+            .delete().eq("assignment_id", assignment.id).eq("service_slot_id", slotId);
+          if (error) throw error;
+        }
+      }
     },
     onSuccess: async () => {
       setPoleEditorOpen(false);
