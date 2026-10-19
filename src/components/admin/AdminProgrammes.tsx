@@ -79,6 +79,9 @@ type Draft = {
   end_date: string;
   end_time: string;
   response_deadline: string;
+  response_deadline_offset_value: string;
+  response_deadline_offset_unit: "hours" | "days";
+  response_deadline_anchor: "program" | "slot";
   location: string;
   status: string;
   importance: string;
@@ -109,6 +112,9 @@ const emptyDraft = (): Draft => ({
   end_date: "",
   end_time: "",
   response_deadline: "",
+  response_deadline_offset_value: "",
+  response_deadline_offset_unit: "hours",
+  response_deadline_anchor: "program",
   location: "",
   status: "unconfirmed",
   importance: "normal",
@@ -246,6 +252,10 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       start_time: s.start_time ?? "",
       end_time: s.end_time ?? "",
       required_count: s.required_count ?? 1,
+      deadline_override: s.response_deadline_offset_value != null,
+      response_deadline_offset_value: s.response_deadline_offset_value == null ? "" : String(s.response_deadline_offset_value),
+      response_deadline_offset_unit: s.response_deadline_offset_unit === "days" ? "days" : "hours",
+      response_deadline_anchor: s.response_deadline_anchor === "program" ? "program" : "slot",
       // Legacy pole/member fields are intentionally no longer edited inside a slot.
       pole_id: "",
       memberIds: [],
@@ -295,6 +305,9 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       end_date: p.end_date ?? "",
       end_time: p.end_time ?? "",
       response_deadline: (p as any).response_deadline ?? "",
+      response_deadline_offset_value: (p as any).response_deadline_offset_value == null ? "" : String((p as any).response_deadline_offset_value),
+      response_deadline_offset_unit: (p as any).response_deadline_offset_unit === "days" ? "days" : "hours",
+      response_deadline_anchor: (p as any).response_deadline_anchor === "slot" ? "slot" : "program",
       location: p.location ?? "",
       status: p.status,
       importance: p.importance ?? "normal",
@@ -349,11 +362,11 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
             v.recurrence_rule,
           );
       if (!v.start_date) throw new Error("La date du programme est obligatoire.");
-      if (!v.response_deadline) throw new Error("La date limite de réponse est obligatoire.");
-      if (v.response_deadline < todayIso())
-        throw new Error("La date limite de réponse ne peut pas être dans le passé.");
-      if (v.response_deadline > v.start_date)
-        throw new Error("La date limite de réponse ne peut pas dépasser la date du programme.");
+      const deadlineOffset = v.response_deadline_offset_value === "" ? null : Number(v.response_deadline_offset_value);
+      if (deadlineOffset !== null && (!Number.isInteger(deadlineOffset) || deadlineOffset < 1))
+        throw new Error("Le délai doit être un nombre entier positif d’heures ou de jours.");
+      if (deadlineOffset !== null && v.response_deadline_anchor === "slot" && !v.detailed_scheduling)
+        throw new Error("Pour calculer l’échéance avant chaque créneau, active les créneaux de service.");
       if (v.detailed_scheduling && !v.serviceSlots.length)
         throw new Error("Ajoute au moins un créneau de service.");
       if (
@@ -377,6 +390,17 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         end_date: v.end_date || null,
         end_time: v.end_time || null,
         response_deadline: v.response_deadline || null,
+        response_deadline_offset_value: deadlineOffset,
+        response_deadline_offset_unit: deadlineOffset === null ? null : v.response_deadline_offset_unit,
+        response_deadline_anchor: deadlineOffset === null ? null : v.response_deadline_anchor,
+        response_deadline_at: (() => {
+          if (deadlineOffset === null) return null;
+          const starts = v.response_deadline_anchor === "slot" && v.serviceSlots.length
+            ? v.serviceSlots.map((slot) => new Date(`${slot.service_date}T${slot.start_time || "00:00"}:00`).getTime() - deadlineOffset * (v.response_deadline_offset_unit === "days" ? 86400000 : 3600000))
+            : [new Date(`${v.start_date}T${v.start_time || "00:00"}:00`).getTime() - deadlineOffset * (v.response_deadline_offset_unit === "days" ? 86400000 : 3600000)];
+          const earliest = Math.min(...starts);
+          return Number.isFinite(earliest) ? new Date(earliest).toISOString() : null;
+        })(),
         location: v.location.trim() || null,
         status: v.status,
         importance: v.importance,
@@ -537,6 +561,16 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           start_time: s.start_time,
           end_time: s.end_time,
           required_count: 1,
+          response_deadline_offset_value: s.deadline_override && s.response_deadline_offset_value !== "" ? Number(s.response_deadline_offset_value) : null,
+          response_deadline_offset_unit: s.deadline_override && s.response_deadline_offset_value !== "" ? s.response_deadline_offset_unit : null,
+          response_deadline_anchor: s.deadline_override && s.response_deadline_offset_value !== "" ? s.response_deadline_anchor : null,
+          response_deadline_at: (() => {
+            if (!s.deadline_override || s.response_deadline_offset_value === "") return null;
+            const anchorDate = s.response_deadline_anchor === "program" ? v.start_date : s.service_date;
+            const anchorTime = s.response_deadline_anchor === "program" ? (v.start_time || "00:00") : (s.start_time || "00:00");
+            const base = new Date(`${anchorDate}T${anchorTime}:00`).getTime();
+            return Number.isFinite(base) ? new Date(base - Number(s.response_deadline_offset_value) * (s.response_deadline_offset_unit === "days" ? 86400000 : 3600000)).toISOString() : null;
+          })(),
           position,
         }));
         const slotIns = await db
@@ -785,17 +819,33 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                     onChange={(e) => setDraft({ ...draft, end_time: e.target.value })}
                   />
                 </Field>
-                <Field label="Date limite de réponse *">
-                  <Input
-                    type="date"
-                    min={todayIso()}
-                    max={draft.start_date || undefined}
-                    value={draft.response_deadline}
-                    onChange={(e) => setDraft({ ...draft, response_deadline: e.target.value })}
-                  />
+                <Field label="Délai de réponse (facultatif)">
+                  <div className="grid grid-cols-[1fr_1fr] gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      placeholder="Ex. 48"
+                      value={draft.response_deadline_offset_value}
+                      onChange={(e) => setDraft({ ...draft, response_deadline_offset_value: e.target.value, response_deadline: "" })}
+                    />
+                    <Select value={draft.response_deadline_offset_unit} onValueChange={(v: "hours" | "days") => setDraft({ ...draft, response_deadline_offset_unit: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hours">Heures</SelectItem>
+                        <SelectItem value="days">Jours</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Select value={draft.response_deadline_anchor} onValueChange={(v: "program" | "slot") => setDraft({ ...draft, response_deadline_anchor: v })}>
+                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="program">Avant le début du programme</SelectItem>
+                      <SelectItem value="slot">Avant le début de chaque créneau</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <span className="block text-[11px] text-muted-foreground">
-                    Utilisée comme échéance de référence pour les réponses et les sollicitations
-                    liées à ce programme.
+                    Laisse vide si aucune échéance n’est nécessaire. Le délai est calculé à partir du début choisi, sans règle fixe imposée.
                   </span>
                 </Field>
               </div>
