@@ -57,12 +57,23 @@ function NotificationsPage(){
   if(error){toast.error(error.message);return;}
   setSelected(new Set());refresh();toast.success("Notification supprimée");
  }
+ function notificationDestination(n:any){
+  const link=String(n.link??"");
+  if(n.entity_type==="solicitation"&&n.entity_id)return `/sollicitations?solicitationId=${encodeURIComponent(n.entity_id)}`;
+  if(n.entity_type==="program"&&n.entity_id){
+   const base=`/programme/${n.entity_id}`;
+   if(n.type==="reponse_attendue"||/sollicitation|réponse attendue/i.test(`${n.type??""} ${n.title??""}`))return `${base}?tab=infos#program-response`;
+   if(/besoin|renfort|pôle ouvert|participation ouverte/i.test(`${n.type??""} ${n.title??""} ${n.body??""}`))return `${base}?tab=participation`;
+  }
+  return link;
+ }
  async function openNotification(n:any){
   if(!n.read){
    const ok=await patch([n.id],{read:true,read_at:new Date().toISOString()});
    if(!ok)return;
   }
-  if(n.link)navigate({to:n.link});
+  const destination=notificationDestination(n);
+  if(destination)navigate({to:destination as any});
  }
  const ids=[...selected];
  const toggle=(id:string)=>setSelected(s=>{const n=new Set(s);n.has(id)?n.delete(id):n.add(id);return n;});
