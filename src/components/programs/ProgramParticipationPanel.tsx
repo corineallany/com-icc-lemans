@@ -79,7 +79,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("programs")
-        .select("id,title,start_date,start_time,response_deadline,response_deadline_at")
+        .select("id,title,start_date,start_time,response_deadline,response_deadline_at,response_deadline_offset_value,response_deadline_offset_unit,response_deadline_anchor")
         .eq("id", programId)
         .single();
       if (error) throw error;
@@ -216,6 +216,35 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     () => new Set((poleMemberships.data ?? []).map((x: any) => `${x.pole_id}::${x.member_id}`)),
     [poleMemberships.data],
   );
+
+  const coveredCountForNeed = (need: any, slotId: string) => {
+    const rows = (modes.data ?? []).filter((x: any) =>
+      x.assignment_id === need.assignment_id &&
+      ["direct", "proposal"].includes(x.assignment_mode) &&
+      !["covered", "withdrawn", "refused"].includes(x.process_status)
+    );
+    return rows.filter((row: any) =>
+      (assignmentMemberSlots.data ?? []).some((link: any) =>
+        link.assignment_member_id === row.id && link.service_slot_id === slotId
+      )
+    ).length;
+  };
+  const totalRequired = (slotNeeds.data ?? []).reduce((sum: number, need: any) => sum + Number(need.required_count || 0), 0);
+  const totalCovered = (slotNeeds.data ?? []).reduce((sum: number, need: any) => sum + coveredCountForNeed(need, need.service_slot_id), 0);
+
+  const deadlineForSlot = (slotId: string) => {
+    const slot = (serviceSlots.data ?? []).find((s: any) => s.id === slotId);
+    if (slot?.response_deadline_at) return slot.response_deadline_at;
+    const program = programInfo.data;
+    if (!program) return "";
+    const offset = program.response_deadline_offset_value;
+    const unit = program.response_deadline_offset_unit === "days" ? 86400000 : 3600000;
+    if (offset == null || !program.response_deadline_anchor) return program.response_deadline_at ?? "";
+    const date = program.response_deadline_anchor === "slot" && slot?.service_date ? slot.service_date : program.start_date;
+    const time = program.response_deadline_anchor === "slot" && slot?.start_time ? slot.start_time : (program.start_time || "00:00");
+    const base = new Date(`${date}T${time}:00`).getTime();
+    return Number.isFinite(base) ? new Date(base - Number(offset) * unit).toISOString() : "";
+  };
 
   const canChooseSlots =
     !!member?.id &&
@@ -383,7 +412,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       const targetId = `target_${crypto.randomUUID()}`;
       const targetName = poleNames.get(requestPoleId) ?? "Pôle";
       const deadlineIso = deadlineAt?.toISOString() ?? null;
-      const deadlineDate = deadlineAt ? deadlineAt.toISOString().slice(0, 10) : (slot?.service_date ?? program.start_date ?? null);
+      const deadlineDate = deadlineAt ? [deadlineAt.getFullYear(), String(deadlineAt.getMonth() + 1).padStart(2, "0"), String(deadlineAt.getDate()).padStart(2, "0")].join("-") : (slot?.service_date ?? program.start_date ?? null);
       const payload: any = {
         id,
         requester: member.full_name,
@@ -442,7 +471,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const openSupportRequest = (assignmentId: string, nature: "reinforcement" | "replacement", slotId = "", replacementMemberId = "") => {
     const slot = (serviceSlots.data ?? []).find((s: any) => s.id === slotId);
     const program = programInfo.data;
-    const initialDeadline = slot?.response_deadline_at ?? program?.response_deadline_at ?? "";
+    const initialDeadline = deadlineForSlot(slotId) || slot?.response_deadline_at || program?.response_deadline_at || "";
     const deadlineLocal = initialDeadline ? new Date(initialDeadline).toISOString().slice(0, 16) : "";
     setRequestPoleId(assignments.find((a) => a.id === assignmentId)?.pole_id ?? "");
     setRequestDraft({
@@ -483,9 +512,10 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       ) : null}
 
       {isStaff ? (
-        <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-3">
-          <div><p className="text-xs text-muted-foreground">Pôles mobilisés</p><p className="text-xl font-black">{assignments.length}</p></div>
-          <div><p className="text-xs text-muted-foreground">Personnes affectées</p><p className="text-xl font-black">{new Set((modes.data ?? []).filter((x: any) => ["direct", "proposal"].includes(x.assignment_mode) && !["covered", "withdrawn", "refused"].includes(x.process_status)).map((x: any) => x.member_id)).size}</p></div>
+        <div className="grid gap-3 rounded-lg border bg-background p-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div><p className="text-xs text-muted-foreground">Besoin initial par créneau</p><p className="text-xl font-black">{totalRequired}</p></div>
+          <div><p className="text-xs text-muted-foreground">Places couvertes</p><p className="text-xl font-black">{totalCovered}</p></div>
+          <div><p className="text-xs text-muted-foreground">À couvrir</p><p className="text-xl font-black">{Math.max(0, totalRequired - totalCovered)}</p></div>
           <div><p className="text-xs text-muted-foreground">Réponses en attente</p><p className="text-xl font-black">{(modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered" && !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length + (proposals.data ?? []).filter((p: any) => p.status === "pending").length}</p></div>
         </div>
       ) : null}
@@ -501,9 +531,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               {needs.map((need: any) => {
                 const assignment = assignments.find((x) => x.id === need.assignment_id);
                 if (!assignment) return null;
-                const linkedRows = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && ["direct", "proposal"].includes(m.assignment_mode) && !["covered", "withdrawn", "refused"].includes(m.process_status));
-                const linkedIds = (assignmentMemberSlots.data ?? []);
-                const slotCount = linkedRows.filter((row: any) => linkedIds.some((link: any) => link.assignment_member_id === row.id && link.service_slot_id === slot.id)).length;
+                const slotCount = coveredCountForNeed(need, slot.id);
                 const pendingCount = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && m.assignment_mode === "solicited" && m.process_status !== "covered").length;
                 return <div key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span>{poleNames.get(assignment.pole_id) ?? "Pôle"} : <b>{slotCount}/{need.required_count}</b> affecté(s) · {Math.max(0, Number(need.required_count) - slotCount)} à couvrir{pendingCount ? ` · ${pendingCount} sollicitation(s) en attente` : ""}</span>
@@ -772,7 +800,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                 <label className="space-y-1 text-sm font-medium">Créneau concerné
                   <select className="h-10 w-full rounded-md border bg-background px-3" value={requestDraft.slotId} onChange={(e) => {
                     const slot = (serviceSlots.data ?? []).find((s: any) => s.id === e.target.value);
-                    const deadline = slot?.response_deadline_at ?? programInfo.data?.response_deadline_at ?? "";
+                    const deadline = deadlineForSlot(e.target.value) || slot?.response_deadline_at || programInfo.data?.response_deadline_at || "";
                     setRequestDraft({ ...requestDraft, slotId: e.target.value, deadlineAt: deadline ? new Date(deadline).toISOString().slice(0,16) : requestDraft.deadlineAt });
                   }}>
                     <option value="">Tout le programme / aucun créneau précis</option>
