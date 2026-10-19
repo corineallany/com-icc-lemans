@@ -830,35 +830,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                     onChange={(e) => setDraft({ ...draft, end_time: e.target.value })}
                   />
                 </Field>
-                <Field label="Délai de réponse (facultatif)">
-                  <div className="grid grid-cols-[1fr_1fr] gap-2">
-                    <Input
-                      type="number"
-                      min={1}
-                      step={1}
-                      placeholder="Ex. 48"
-                      value={draft.response_deadline_offset_value}
-                      onChange={(e) => setDraft({ ...draft, response_deadline_offset_value: e.target.value, response_deadline: "" })}
-                    />
-                    <Select value={draft.response_deadline_offset_unit} onValueChange={(v: "hours" | "days") => setDraft({ ...draft, response_deadline_offset_unit: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="hours">Heures</SelectItem>
-                        <SelectItem value="days">Jours</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Select value={draft.response_deadline_anchor} onValueChange={(v: "program" | "slot") => setDraft({ ...draft, response_deadline_anchor: v })}>
-                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="program">Avant le début du programme</SelectItem>
-                      <SelectItem value="slot">Avant le début de chaque créneau</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span className="block text-[11px] text-muted-foreground">
-                    Laisse vide si aucune échéance n’est nécessaire. Le délai est calculé à partir du début choisi, sans règle fixe imposée.
-                  </span>
-                </Field>
+
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Lieu">
