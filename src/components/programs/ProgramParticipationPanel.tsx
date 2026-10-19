@@ -513,7 +513,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           }
         }
       }
-      const { error } = await db.from("programs").update({ slot_selection_mode: mode }).eq("id", programId);
+      const { error } = await db.from("programs").update({ slot_selection_mode: mode === "member" ? "recipient_choice" : "organizer" }).eq("id", programId);
       if (error) throw error;
     },
     onSuccess: async () => {
@@ -901,7 +901,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       ) : null}
 
       {programConfig.data?.detailed_scheduling &&
-      programConfig.data?.slot_selection_mode === "member" ? (
+      programConfig.data?.slot_selection_mode === "recipient_choice" ? (
         <ProgramMemberSlotChooser
           programId={programId}
           memberId={member?.id}
