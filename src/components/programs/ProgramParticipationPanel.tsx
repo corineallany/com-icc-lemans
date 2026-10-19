@@ -70,6 +70,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const [globalDeadlineUnit, setGlobalDeadlineUnit] = useState<"hours" | "days" | null>(null);
   const [globalDeadlineAnchor, setGlobalDeadlineAnchor] = useState<"program" | "slot" | null>(null);
   const [slotDeadlineEdits, setSlotDeadlineEdits] = useState<Record<string, { enabled: boolean; value: string; unit: "hours" | "days"; anchor: "program" | "slot" }>>({});
+  const [poleEditorOpen, setPoleEditorOpen] = useState(false);
+  const [selectedPoleIds, setSelectedPoleIds] = useState<string[]>([]);
 
   const programConfig = useQuery({
     queryKey: ["program-slot-config", programId],
@@ -499,6 +501,48 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     onError: (e: any) => toast.error(e.message || "Impossible d’enregistrer le délai du créneau."),
   });
 
+  const savePoleSelection = useMutation({
+    mutationFn: async () => {
+      if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
+      const selected = [...new Set(selectedPoleIds)];
+      const currentByPole = new Map(assignments.map((a) => [a.pole_id, a]));
+      const removed = assignments.filter((a) => !selected.includes(a.pole_id));
+      for (const assignment of removed) {
+        const { data: linkedMembers, error: membersError } = await (supabase as any)
+          .from("program_assignment_members").select("id").eq("assignment_id", assignment.id);
+        if (membersError) throw membersError;
+        if ((linkedMembers ?? []).length) {
+          throw new Error(`Le pôle ${poleNames.get(assignment.pole_id) ?? "sélectionné"} contient déjà des membres affectés ou sollicités. Traite ces participations avant de retirer le pôle.`);
+        }
+      }
+      for (const assignment of removed) {
+        const { error } = await (supabase as any).from("program_assignments").delete().eq("id", assignment.id);
+        if (error) throw error;
+      }
+      const additions = selected.filter((poleId) => !currentByPole.has(poleId));
+      for (const poleId of additions) {
+        const { data: created, error } = await (supabase as any).from("program_assignments")
+          .insert({ program_id: programId, pole_id: poleId, required_count: 1, tasks: null })
+          .select("id").single();
+        if (error) throw error;
+        if ((serviceSlots.data ?? []).length) {
+          const needs = (serviceSlots.data ?? []).map((slot: any) => ({
+            assignment_id: created.id, service_slot_id: slot.id, required_count: 1,
+          }));
+          const { error: needsError } = await (supabase as any).from("program_assignment_slot_needs").insert(needs);
+          if (needsError) throw needsError;
+        }
+      }
+    },
+    onSuccess: async () => {
+      setPoleEditorOpen(false);
+      await qc.invalidateQueries({ queryKey: ["programs"] });
+      await qc.invalidateQueries({ queryKey: ["program-staffing-needs", programId] });
+      toast.success("Les pôles mobilisés ont été mis à jour. Les nouveaux pôles ont un besoin initial d’une personne par créneau, modifiable ci-dessous.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible de modifier les pôles mobilisés."),
+  });
+
   const updateStaffingNeed = useMutation({
     mutationFn: async ({ assignmentId, slotId, count }: { assignmentId: string; slotId: string; count: number }) => {
       if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
@@ -620,12 +664,18 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
   return (
     <div className="mt-4 space-y-3 rounded-xl border bg-muted/10 p-4">
-      <div>
-        <h3 className="font-black text-icc-violet">Participation & besoins</h3>
-        <p className="text-xs text-muted-foreground">
-          Affectation directe = aucune réponse demandée. Sollicitation = demande de participation
-          liée à ce programme, avec réponse du membre. Le choix des créneaux reste indépendant.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-black text-icc-violet">Participation & besoins</h3>
+          <p className="text-xs text-muted-foreground">
+            Affectation directe = aucune réponse demandée. Sollicitation = demande de participation
+            liée à ce programme, avec réponse du membre. Le choix des créneaux reste indépendant.
+          </p>
+        </div>
+        {isStaff ? <Button size="sm" variant="outline" onClick={() => {
+          setSelectedPoleIds(assignments.map((a) => a.pole_id));
+          setPoleEditorOpen(true);
+        }}>Modifier les pôles mobilisés</Button> : null}
       </div>
 
       {programConfig.data?.detailed_scheduling &&
@@ -971,6 +1021,31 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           </div>
         );
       })}
+      <Dialog open={poleEditorOpen} onOpenChange={setPoleEditorOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Modifier les pôles mobilisés</DialogTitle>
+            <DialogDescription>
+              Coche les pôles nécessaires à ce programme. Un pôle déjà associé à des membres ne peut pas être retiré tant que ses affectations ou sollicitations existent.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            {(poles ?? []).filter((p: any) => !p.archived && !p.deleted).map((p: any) => (
+              <label key={p.id} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                <input type="checkbox" checked={selectedPoleIds.includes(p.id)} onChange={(e) => setSelectedPoleIds((ids) => e.target.checked ? [...new Set([...ids, p.id])] : ids.filter((id) => id !== p.id))} />
+                <span className="font-medium">{p.name}</span>
+                {assignments.some((a) => a.pole_id === p.id) ? <Badge variant="secondary" className="ml-auto">Déjà mobilisé</Badge> : null}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Lorsqu’un nouveau pôle est ajouté à un programme avec plusieurs créneaux, un besoin initial d’une personne par créneau est créé. Tu peux ajuster chaque nombre dans le tableau des besoins.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPoleEditorOpen(false)}>Annuler</Button>
+            <Button disabled={savePoleSelection.isPending} onClick={() => savePoleSelection.mutate()}>{savePoleSelection.isPending ? "Enregistrement…" : "Enregistrer les pôles"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!requestDraft} onOpenChange={(open) => { if (!open) setRequestDraft(null); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
