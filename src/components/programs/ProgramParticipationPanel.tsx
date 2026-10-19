@@ -261,6 +261,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     const offset = program.response_deadline_offset_value;
     const unit = program.response_deadline_offset_unit === "days" ? 86400000 : 3600000;
     if (offset == null || !program.response_deadline_anchor) return program.response_deadline_at ?? "";
+    if (program.response_deadline_anchor === "slot" && !slot) return program.response_deadline_at ?? "";
     const date = program.response_deadline_anchor === "slot" && slot?.service_date ? slot.service_date : program.start_date;
     const time = program.response_deadline_anchor === "slot" && slot?.start_time ? slot.start_time : (program.start_time || "00:00");
     const base = new Date(`${date}T${time}:00`).getTime();
