@@ -256,11 +256,14 @@ function Sollicitations() {
   const docsForProgram = (id?: string | null) =>
     (programDocuments.data ?? []).filter((d) => d.program_id === id);
 
-  function deadlineText(date?: string | null) {
-    if (!date) return "—";
-    if (date < todayIso()) return `Échéance dépassée · ${formatDate(date)}`;
-    if (date === todayIso()) return `À répondre aujourd'hui · ${formatDate(date)}`;
-    return `Réponse attendue avant le ${formatDate(date)}`;
+  function deadlineText(value?: string | null) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return formatDate(value);
+    const text = date.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+    if (date.getTime() < Date.now()) return `Échéance dépassée · ${text}`;
+    if (date.toDateString() === new Date().toDateString()) return `À répondre aujourd'hui · ${text}`;
+    return `Réponse attendue avant le ${text}`;
   }
   function aggregate(rs: Recipient[]) {
     if (!rs.length || rs.every((r) => r.response === "pending")) return "pending";
@@ -586,7 +589,9 @@ function Sollicitations() {
       note?: string;
       chosenSlots?: string[];
     }) => {
-      if (s.response_deadline && s.response_deadline < todayIso() && !isStaff)
+      if (!isStaff && (s.response_deadline_at
+        ? new Date(s.response_deadline_at).getTime() < Date.now()
+        : s.response_deadline && s.response_deadline < todayIso()))
         throw new Error("La date limite de réponse est dépassée.");
       if (
         s.slot_selection_mode === "member" &&
@@ -991,7 +996,7 @@ function Sollicitations() {
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     <p>
-                      <b>Date limite :</b> {deadlineText(s.response_deadline)}
+                      <b>Date limite :</b> {deadlineText(s.response_deadline_at ?? s.response_deadline)}
                     </p>
                     <p>
                       <b>{rs.length}</b> personne(s) destinataire(s) ·{" "}
@@ -1279,7 +1284,7 @@ function Sollicitations() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <Info label="Nature" value={NLABEL[detail.nature] ?? "Demande ponctuelle"} />
                   <Info label="Date" value={formatDate(detail.event_date)} />
-                  <Info label="Date limite" value={deadlineText(detail.response_deadline)} />
+                  <Info label="Date limite" value={deadlineText(detail.response_deadline_at ?? detail.response_deadline)} />
                   <Info
                     label="Statut"
                     value={
@@ -1338,7 +1343,9 @@ function Sollicitations() {
                       const canAnswer =
                         member?.id === r.member_id &&
                         detail.status !== "cancelled" &&
-                        (!detail.response_deadline || detail.response_deadline >= todayIso());
+                        (detail.response_deadline_at
+                          ? new Date(detail.response_deadline_at).getTime() >= Date.now()
+                          : !detail.response_deadline || detail.response_deadline >= todayIso());
                       return (
                         <div key={r.id} className="rounded-xl border p-3 text-sm">
                           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1432,8 +1439,9 @@ function Sollicitations() {
                               </Button>
                             </div>
                           ) : member?.id === r.member_id &&
-                            detail.response_deadline &&
-                            detail.response_deadline < todayIso() ? (
+                            (detail.response_deadline_at
+                              ? new Date(detail.response_deadline_at).getTime() < Date.now()
+                              : detail.response_deadline && detail.response_deadline < todayIso()) ? (
                             <p className="mt-2 text-xs text-muted-foreground">
                               Échéance dépassée : réponse verrouillée.
                             </p>
