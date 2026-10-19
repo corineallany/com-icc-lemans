@@ -661,18 +661,24 @@ function Sollicitations() {
           for (const oldLink of oldLinks ?? []) {
             const { data: oldSlotLink, error: oldSlotError } = await (supabase as any).from("program_assignment_member_slots").select("id").eq("assignment_member_id", oldLink.id).eq("service_slot_id", slot?.id).maybeSingle();
             if (oldSlotError) throw oldSlotError;
-            if (!oldSlotLink || !slot) continue;
+            if (!slot) continue;
             const { data: newLink, error: newLinkError } = await (supabase as any).from("program_assignment_members").upsert({ assignment_id: oldLink.assignment_id, member_id: memberId }, { onConflict: "assignment_id,member_id" }).select("id").single();
             if (newLinkError) throw newLinkError;
-            const { error: slotInsertError } = await (supabase as any).from("program_assignment_member_slots").upsert({ assignment_member_id: newLink.id, program_day_id: slot.program_day_id, service_slot_id: slot.id, start_time: slot.start_time, end_time: slot.end_time }, { onConflict: "assignment_member_id,service_slot_id" });
-            if (slotInsertError) throw slotInsertError;
-            const { error: removeSlotError } = await (supabase as any).from("program_assignment_member_slots").delete().eq("id", oldSlotLink.id);
-            if (removeSlotError) throw removeSlotError;
-            const { data: remainingSlots, error: remainingError } = await (supabase as any).from("program_assignment_member_slots").select("id").eq("assignment_member_id", oldLink.id);
-            if (remainingError) throw remainingError;
-            if (!(remainingSlots ?? []).length) {
-              const { error: removeMemberError } = await (supabase as any).from("program_assignment_members").delete().eq("id", oldLink.id);
-              if (removeMemberError) throw removeMemberError;
+            const { data: newSlotLink, error: newSlotQueryError } = await (supabase as any).from("program_assignment_member_slots").select("id").eq("assignment_member_id", newLink.id).eq("service_slot_id", slot.id).maybeSingle();
+            if (newSlotQueryError) throw newSlotQueryError;
+            if (!newSlotLink) {
+              const { error: slotInsertError } = await (supabase as any).from("program_assignment_member_slots").insert({ assignment_member_id: newLink.id, program_day_id: slot.program_day_id, service_slot_id: slot.id, start_time: slot.start_time, end_time: slot.end_time });
+              if (slotInsertError) throw slotInsertError;
+            }
+            if (oldSlotLink) {
+              const { error: removeSlotError } = await (supabase as any).from("program_assignment_member_slots").delete().eq("id", oldSlotLink.id);
+              if (removeSlotError) throw removeSlotError;
+              const { data: remainingSlots, error: remainingError } = await (supabase as any).from("program_assignment_member_slots").select("id").eq("assignment_member_id", oldLink.id);
+              if (remainingError) throw remainingError;
+              if (!(remainingSlots ?? []).length) {
+                const { error: removeMemberError } = await (supabase as any).from("program_assignment_members").delete().eq("id", oldLink.id);
+                if (removeMemberError) throw removeMemberError;
+              }
             }
           }
         } else {
@@ -704,8 +710,12 @@ function Sollicitations() {
             const { data: slot, error: slotError } = await (supabase as any).from("program_service_slots").select("id,program_day_id,start_time,end_time").eq("id", s.request_slot_id).maybeSingle();
             if (slotError) throw slotError;
             if (slot) {
-              const { error: slotLinkError } = await (supabase as any).from("program_assignment_member_slots").upsert({ assignment_member_id: assignmentMember.id, program_day_id: slot.program_day_id, service_slot_id: slot.id, start_time: slot.start_time, end_time: slot.end_time }, { onConflict: "assignment_member_id,service_slot_id" });
-              if (slotLinkError) throw slotLinkError;
+              const { data: existingSlotLink, error: existingSlotLinkError } = await (supabase as any).from("program_assignment_member_slots").select("id").eq("assignment_member_id", assignmentMember.id).eq("service_slot_id", slot.id).maybeSingle();
+              if (existingSlotLinkError) throw existingSlotLinkError;
+              if (!existingSlotLink) {
+                const { error: slotLinkError } = await (supabase as any).from("program_assignment_member_slots").insert({ assignment_member_id: assignmentMember.id, program_day_id: slot.program_day_id, service_slot_id: slot.id, start_time: slot.start_time, end_time: slot.end_time });
+                if (slotLinkError) throw slotLinkError;
+              }
               const { data: need, error: needError } = await (supabase as any).from("program_assignment_slot_needs").select("id").eq("assignment_id", assignmentId).eq("service_slot_id", slot.id).maybeSingle();
               if (needError) throw needError;
               if (!need) {
