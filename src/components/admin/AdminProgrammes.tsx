@@ -324,7 +324,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       general_note: p.general_note ?? "",
       poles: map,
       detailed_scheduling: (p as any).detailed_scheduling ?? serviceSlots.length > 0,
-      slot_selection_mode: (p as any).slot_selection_mode === "member" ? "member" : "organizer",
+      slot_selection_mode: (p as any).slot_selection_mode === "recipient_choice" ? "member" : "organizer",
       serviceSlots,
     });
   }
@@ -452,7 +452,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         resource_link: v.resource_link.trim() || null,
         general_note: v.general_note.trim() || null,
         detailed_scheduling: v.detailed_scheduling,
-        slot_selection_mode: v.slot_selection_mode,
+        slot_selection_mode: v.slot_selection_mode === "member" ? "recipient_choice" : "organizer",
       };
       const table = (supabase as any).from("programs");
       if (v.id) {
