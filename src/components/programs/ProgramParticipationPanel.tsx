@@ -88,6 +88,17 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
+  const supportRequests = useQuery({
+    queryKey: ["program-support-requests", programId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("solicitations")
+        .select("id,nature,status,target_pole_id,request_count,request_mission,request_slot_id,response_deadline_at,created_at,archived,deleted")
+        .eq("program_id", programId).eq("archived", false).eq("deleted", false).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const serviceSlots = useQuery({
     queryKey: ["program-staffing-slots", programId],
     queryFn: async () => {
@@ -420,6 +431,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       if (!member?.id) throw new Error("Ton compte doit être lié à un membre.");
       if (!requestPoleId) throw new Error("Choisis le pôle qui recevra le renfort.");
       if (!draft.mission.trim()) throw new Error("Précise la mission à réaliser.");
+      if (!draft.deadlineAt) throw new Error("Définis une date et une heure limite de réponse.");
       if (!draft.memberIds.length) throw new Error("Sélectionne au moins un membre à solliciter.");
       const slot = (serviceSlots.data ?? []).find((s: any) => s.id === draft.slotId);
       const program = programInfo.data;
@@ -478,7 +490,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     onSuccess: async () => {
       setRequestDraft(null);
       setRequestPoleId("");
-      for (const queryKey of [["solicitations"], ["solicitation-targets"], ["solicitation-recipients"], ["programs"], ["notifications"]]) {
+      for (const queryKey of [["solicitations"], ["solicitation-targets"], ["solicitation-recipients"], ["program-support-requests", programId], ["programs"], ["notifications"]]) {
         await qc.invalidateQueries({ queryKey });
       }
       toast.success("Demande créée dans Demandes ponctuelles avec les informations du programme.");
@@ -535,6 +547,25 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           <div><p className="text-xs text-muted-foreground">Places couvertes</p><p className="text-xl font-black">{totalCovered}</p></div>
           <div><p className="text-xs text-muted-foreground">À couvrir</p><p className="text-xl font-black">{Math.max(0, totalRequired - totalCovered)}</p></div>
           <div><p className="text-xs text-muted-foreground">Réponses en attente</p><p className="text-xl font-black">{(modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && x.process_status !== "covered" && !["available", "partial", "unavailable"].includes(responseMap.get(x.member_id))).length + (proposals.data ?? []).filter((p: any) => p.status === "pending").length}</p></div>
+        </div>
+      ) : null}
+
+      {isStaff && (supportRequests.data ?? []).length ? (
+        <div className="space-y-2 rounded-lg border bg-background p-3">
+          <h4 className="font-bold">Demandes ponctuelles liées au programme</h4>
+          {(supportRequests.data ?? []).map((request: any) => {
+            const slot = (serviceSlots.data ?? []).find((s: any) => s.id === request.request_slot_id);
+            const status = request.status === "pending" ? "En attente" : request.status === "accepted" ? "Acceptée" : request.status === "refused" ? "Refusée" : request.status === "cancelled" ? "Annulée" : request.status;
+            return <div key={request.id} className="flex flex-wrap items-start justify-between gap-2 rounded-md border p-2 text-sm">
+              <div>
+                <div className="font-semibold">{request.nature === "replacement" ? "Remplacement" : "Renfort"} · {poleNames.get(request.target_pole_id) ?? "Pôle"}</div>
+                <div>{request.request_mission || "Mission non précisée"}</div>
+                {slot ? <div className="text-xs text-muted-foreground">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : ""} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div> : null}
+                <div className="text-xs text-muted-foreground">{request.response_deadline_at ? `Réponse avant le ${new Date(request.response_deadline_at).toLocaleString("fr-FR")}` : "Pas d’échéance renseignée"}</div>
+              </div>
+              <Badge variant={request.status === "pending" ? "destructive" : "secondary"}>{status}</Badge>
+            </div>;
+          })}
         </div>
       ) : null}
 
