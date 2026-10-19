@@ -907,7 +907,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                 onChange={(serviceSlots) => setDraft({ ...draft, serviceSlots })}
               />
               <p className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 text-sm text-muted-foreground">
-                Les modalités de mobilisation (sélection globale du programme ou créneau par créneau), les réponses des membres et les affectations se gèrent dans la fiche détaillée du programme, onglet « Participation & besoins ». Vous pourrez les modifier après la création, selon vos droits.
+                Tu peux toujours sélectionner ici les pôles et les personnes, puis choisir pour chaque personne « Solliciter » ou « Affecter directement ». Pour un programme avec plusieurs créneaux, le mode de mobilisation — les personnes sollicitées indiquent-elles leurs disponibilités sur le programme, ou le responsable choisit-il les créneaux ? — se règle après création dans la fiche du programme, onglet « Participation & besoins ». Ce réglage reste modifiable selon tes droits. Pour un programme simple sans créneaux détaillés, ce choix ne s’affiche pas.
               </p>
               <section>
                 <h3 className="mb-2 font-black text-icc-violet">Pôles et membres mobilisés</h3>
