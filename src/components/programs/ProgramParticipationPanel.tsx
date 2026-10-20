@@ -76,6 +76,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const [selectedPoleIds, setSelectedPoleIds] = useState<string[]>([]);
   const [poleSlotSelection, setPoleSlotSelection] = useState<Record<string, string[]>>({});
   const [deadlinesOpen, setDeadlinesOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
+  const [requestsTab, setRequestsTab] = useState<"pending" | "history">("pending");
   const [openSlotDeadlines, setOpenSlotDeadlines] = useState<Record<string, boolean>>({});
   const [openMemberSelectors, setOpenMemberSelectors] = useState<Record<string, boolean>>({});
   const [selectedMembers, setSelectedMembers] = useState<Record<string, string[]>>({});
@@ -353,6 +355,10 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const completedSupportCount = supportRows.filter((x: any) => ["accepted", "covered", "completed", "fulfilled"].includes(String(x.status).toLowerCase())).length;
   const pendingReinforcementCount = supportRows.filter((x: any) => x.nature !== "replacement" && x.status === "pending").length;
   const pendingReplacementCount = supportRows.filter((x: any) => x.nature === "replacement" && x.status === "pending").length;
+  const pendingSolicitationResponses = activeSolicitations.filter((x: any) => ["available", "partial"].includes(responseMap.get(x.member_id)));
+  const pendingProposals = (proposals.data ?? []).filter((p: any) => p.status === "pending");
+  const pendingWithdrawals = (withdrawalRequests.data ?? []).filter((r: any) => r.status === "pending");
+  const pendingRequestCount = pendingSolicitationResponses.length + pendingProposals.length + pendingWithdrawals.length + supportRows.filter((x: any) => x.status === "pending").length;
   const totalRequired = displayNeeds.reduce((sum: number, need: any) => sum + Number(need.required_count ?? 0), 0);
   const totalCovered = displayNeeds.reduce((sum: number, need: any) => {
     const required = Number(need.required_count ?? 0);
@@ -944,6 +950,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               setModeEditorOpen(true);
             }}>Mode de mobilisation</Button>
           ) : null}
+          <Button size="sm" variant="outline" onClick={() => { setRequestsTab("pending"); setRequestsOpen(true); }}>Demandes{pendingRequestCount > 0 ? ` (${pendingRequestCount})` : ""}</Button>
           <Button size="sm" variant="outline" onClick={() => setDeadlinesOpen(true)}>Délais de réponse</Button>
         </div> : null}
       </div>
@@ -1045,6 +1052,97 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           poles={poles}
         />
       ) : null}
+
+      <Dialog open={isStaff && requestsOpen} onOpenChange={setRequestsOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Demandes du programme</DialogTitle>
+            <DialogDescription>Retrouve au même endroit les réponses aux sollicitations, les propositions spontanées, les demandes de désistement et le suivi des renforts/remplacements.</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 border-b pb-3">
+            <Button size="sm" variant={requestsTab === "pending" ? "default" : "outline"} onClick={() => setRequestsTab("pending")}>À traiter ({pendingRequestCount})</Button>
+            <Button size="sm" variant={requestsTab === "history" ? "default" : "outline"} onClick={() => setRequestsTab("history")}>Historique</Button>
+          </div>
+          {requestsTab === "pending" ? (
+            <div className="space-y-3">
+              <section className="space-y-2">
+                <h4 className="font-bold">Réponses aux sollicitations</h4>
+                {pendingSolicitationResponses.map((row: any) => (
+                  <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                    <div><b>{names.get(row.member_id) ?? row.member_id}</b><p className="text-muted-foreground">{responseMap.get(row.member_id) === "partial" ? "Disponible partiellement" : "Disponible"} · {poleNames.get(assignments.find((a) => a.id === row.assignment_id)?.pole_id ?? "") ?? "Pôle"}</p></div>
+                    <Button size="sm" disabled={confirmSolicitation.isPending} onClick={() => confirmSolicitation.mutate(row.id)}>Confirmer l’affectation</Button>
+                  </div>
+                ))}
+                {!pendingSolicitationResponses.length ? <p className="text-sm text-muted-foreground">Aucune réponse de sollicitation ne nécessite de confirmation.</p> : null}
+              </section>
+              <section className="space-y-2">
+                <h4 className="font-bold">Propositions spontanées</h4>
+                {pendingProposals.map((p: any) => (
+                  <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                    <div><b>{names.get(p.member_id) ?? p.member_id}</b><p className="text-muted-foreground">{poleNames.get(assignments.find((a) => a.id === p.assignment_id)?.pole_id ?? "") ?? "Pôle"} · {p.created_at ? stamp(p.created_at) : ""}</p>{p.note ? <p className="mt-1">{p.note}</p> : null}</div>
+                    <div className="flex gap-2"><Button size="sm" disabled={decide.isPending} onClick={() => decide.mutate({ id: p.id, d: "assigned" })}>Accepter / affecter</Button><Button size="sm" variant="outline" disabled={decide.isPending} onClick={() => decide.mutate({ id: p.id, d: "refused" })}>Refuser</Button></div>
+                  </div>
+                ))}
+                {!pendingProposals.length ? <p className="text-sm text-muted-foreground">Aucune proposition spontanée en attente.</p> : null}
+              </section>
+              <section className="space-y-2">
+                <h4 className="font-bold">Demandes de désistement</h4>
+                {pendingWithdrawals.map((r: any) => {
+                  const assignmentMember = (modes.data ?? []).find((m: any) => m.id === r.assignment_member_id);
+                  const assignment = assignments.find((a) => a.id === assignmentMember?.assignment_id);
+                  return <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                    <div><b>{names.get(assignmentMember?.member_id) ?? "Membre"}</b><p className="text-muted-foreground">{poleNames.get(assignment?.pole_id ?? "") ?? "Pôle"}{r.reason ? ` · Motif : ${r.reason}` : ""}</p></div>
+                    <div className="flex gap-2"><Button size="sm" disabled={decideAssignmentWithdrawal.isPending} onClick={() => decideAssignmentWithdrawal.mutate({ id: r.id, decision: "approved" })}>Valider</Button><Button size="sm" variant="outline" disabled={decideAssignmentWithdrawal.isPending} onClick={() => decideAssignmentWithdrawal.mutate({ id: r.id, decision: "rejected" })}>Refuser</Button></div>
+                  </div>;
+                })}
+                {!pendingWithdrawals.length ? <p className="text-sm text-muted-foreground">Aucun désistement à valider.</p> : null}
+              </section>
+              <section className="space-y-2">
+                <h4 className="font-bold">Renforts et remplacements</h4>
+                {supportRows.filter((r: any) => r.status === "pending").map((r: any) => {
+                  const slot = (serviceSlots.data ?? []).find((s: any) => s.id === r.request_slot_id);
+                  return <div key={r.id} className="rounded-lg border p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2"><b>{r.nature === "replacement" ? "Remplacement" : "Renfort"} · {poleNames.get(r.target_pole_id) ?? "Pôle"}</b><Badge variant="destructive">En attente</Badge></div>
+                    <p>{r.request_mission || "Mission non précisée"}</p>
+                    {slot ? <p className="text-xs text-muted-foreground">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : ""} · {slot.label || `${slot.start_time}–${slot.end_time}`}</p> : null}
+                    <p className="text-xs text-muted-foreground">{r.response_deadline_at ? `Réponse attendue avant le ${new Date(r.response_deadline_at).toLocaleString("fr-FR")}` : "Aucune échéance renseignée"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Demande envoyée : suivi des réponses dans la demande de sollicitation associée.</p>
+                  </div>;
+                })}
+                {!supportRows.some((r: any) => r.status === "pending") ? <p className="text-sm text-muted-foreground">Aucun renfort ou remplacement en attente.</p> : null}
+              </section>
+              {pendingRequestCount === 0 ? <p className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">Tout est à jour : aucune demande en attente de traitement.</p> : null}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <section className="space-y-2">
+                <h4 className="font-bold">Propositions spontanées</h4>
+                {(proposals.data ?? []).filter((p: any) => p.status !== "pending").map((p: any) => <div key={p.id} className="rounded-md border p-3 text-sm"><b>{names.get(p.member_id) ?? p.member_id}</b> · {poleNames.get(assignments.find((a) => a.id === p.assignment_id)?.pole_id ?? "") ?? "Pôle"}<p className="text-muted-foreground">{proposalLabel[p.status] ?? p.status} · {p.created_at ? stamp(p.created_at) : ""}</p>{p.note ? <p>{p.note}</p> : null}</div>)}
+                {!(proposals.data ?? []).some((p: any) => p.status !== "pending") ? <p className="text-sm text-muted-foreground">Aucune proposition traitée.</p> : null}
+              </section>
+              <section className="space-y-2">
+                <h4 className="font-bold">Renforts et remplacements</h4>
+                {supportRows.filter((r: any) => r.status !== "pending").map((r: any) => <div key={r.id} className="rounded-md border p-3 text-sm"><b>{r.nature === "replacement" ? "Remplacement" : "Renfort"} · {poleNames.get(r.target_pole_id) ?? "Pôle"}</b><p>{r.request_mission || "Mission non précisée"}</p><p className="text-muted-foreground">Statut : {r.status}</p></div>)}
+                {!supportRows.some((r: any) => r.status !== "pending") ? <p className="text-sm text-muted-foreground">Aucun renfort ou remplacement clôturé.</p> : null}
+              </section>
+              <section className="space-y-2">
+                <h4 className="font-bold">Désistements</h4>
+                {withdrawalRequests.data?.filter((r: any) => r.status !== "pending").map((r: any) => {
+                  const assignmentMember = (modes.data ?? []).find((m: any) => m.id === r.assignment_member_id);
+                  return <div key={r.id} className="rounded-md border p-3 text-sm"><b>{names.get(assignmentMember?.member_id) ?? "Membre"}</b><p className="text-muted-foreground">Statut : {r.status}{r.reason ? ` · Motif : ${r.reason}` : ""}</p></div>;
+                })}
+                {!(withdrawalRequests.data ?? []).some((r: any) => r.status !== "pending") ? <p className="text-sm text-muted-foreground">Aucun désistement traité.</p> : null}
+              </section>
+              <section className="space-y-2">
+                <h4 className="font-bold">Réponses aux sollicitations</h4>
+                {(modes.data ?? []).filter((x: any) => x.assignment_mode === "solicited" && (x.process_status === "covered" || ["unavailable"].includes(responseMap.get(x.member_id)))).map((row: any) => <div key={row.id} className="rounded-md border p-3 text-sm"><b>{names.get(row.member_id) ?? row.member_id}</b><p className="text-muted-foreground">{row.process_status === "covered" ? "Sollicitation clôturée" : "Indisponible"} · {poleNames.get(assignments.find((a) => a.id === row.assignment_id)?.pole_id ?? "") ?? "Pôle"}</p></div>)}
+                {!(modes.data ?? []).some((x: any) => x.assignment_mode === "solicited" && (x.process_status === "covered" || ["unavailable"].includes(responseMap.get(x.member_id)))) ? <p className="text-sm text-muted-foreground">Aucune réponse clôturée à afficher.</p> : null}
+              </section>
+            </div>
+          )}
+          <DialogFooter><Button variant="outline" onClick={() => setRequestsOpen(false)}>Fermer</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isStaff && deadlinesOpen && !!programInfo.data} onOpenChange={setDeadlinesOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
