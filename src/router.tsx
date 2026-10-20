@@ -8,7 +8,7 @@ export const getRouter = () => {
       queries: {
         // Reuse recent results while navigating; RealtimeQuerySync invalidates
         // the affected keys as soon as the underlying table changes.
-        staleTime: 20_000,
+        staleTime: 60_000,
         refetchOnMount: true,
         refetchOnWindowFocus: true,
         refetchOnReconnect: true,
@@ -28,7 +28,8 @@ export const getRouter = () => {
     basepath,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreloadStaleTime: 30_000,
+    defaultPreload: "intent",
+    defaultPreloadStaleTime: 60_000,
   });
 
   return router;
