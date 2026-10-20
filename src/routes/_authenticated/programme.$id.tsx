@@ -757,6 +757,7 @@ function ProgramSheet() {
                 .filter((d) => d.program_id === id)
                 .map((d) => (
                   <a
+                    id={`program-document-${d.id}`}
                     key={d.id}
                     href={d.url}
                     className="block font-semibold text-icc-violet underline"
