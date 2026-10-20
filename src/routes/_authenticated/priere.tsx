@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useCurrentRole } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { logAction } from "@/lib/icc";
 
 export const Route = createFileRoute("/_authenticated/priere")({
   head: () => ({ meta: [{ title: "Prière — COM ICC Le Mans" }] }),
@@ -197,6 +198,8 @@ function PrayerPage() {
       const rpc = kind === "subject" ? "prayer_archive_subject" : "prayer_archive_program";
       const { error } = await db().rpc(rpc, { p_id: id, p_destination: destination });
       if (error) throw error;
+      const label = kind === "subject" ? "Sujet de prière" : "Temps de prière";
+      await logAction({ action: "element_archive", entity: kind === "subject" ? "prayer_subjects" : "prayer_programs", entityId: id, detail: label + " archivé", actorName: member?.full_name });
     },
     onSuccess: async () => { await refresh(); toast.success("Élément archivé."); },
     onError: (e: any) => toast.error(e.message ?? "Impossible d’archiver cet élément."),
