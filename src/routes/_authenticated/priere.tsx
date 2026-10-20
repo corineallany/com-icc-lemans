@@ -65,7 +65,7 @@ function PrayerPage() {
     enabled: !!member?.id,
     queryFn: async () => {
       const source = canManage ? "prayer_subjects" : "prayer_subjects_public";
-      const { data, error } = await db().from(source).select("*").is("archived_at", null).is("deleted_at", null).order("created_at", { ascending: false }).then((r:any) => r);
+      const { data, error } = await db().from(source).select("*").order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
