@@ -6,13 +6,17 @@ export const getRouter = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 0,
-        refetchOnMount: "always",
-        refetchOnWindowFocus: "always",
-        refetchOnReconnect: "always",
-        // Les tableaux de bord restent synchronisés même lorsqu'un autre membre modifie les données.
-        refetchInterval: 30_000,
+        // Reuse recent results while navigating; RealtimeQuerySync invalidates
+        // the affected keys as soon as the underlying table changes.
+        staleTime: 20_000,
+        refetchOnMount: true,
+        refetchOnWindowFocus: true,
+        refetchOnReconnect: true,
+        // Do not poll every active query globally. Live updates come from Realtime;
+        // polling should be opted into only by the few views that need it.
+        refetchInterval: false,
         refetchIntervalInBackground: false,
+        retry: 1,
       },
     },
   });
@@ -24,7 +28,7 @@ export const getRouter = () => {
     basepath,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreloadStaleTime: 0,
+    defaultPreloadStaleTime: 30_000,
   });
 
   return router;
