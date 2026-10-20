@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, MessageSquareText, Pencil, Users } from "lucide-react";
 import { toast } from "sonner";
 
@@ -134,6 +134,7 @@ function PostService() {
   const { member, userId } = useCurrentRole();
   const [globalDraft, setGlobalDraft] = useState<GlobalDraft | null>(null);
   const [contributionDraft, setContributionDraft] = useState<ContributionDraft | null>(null);
+  useEffect(()=>{const id=new URLSearchParams(window.location.search).get("programId");if(!id)return;const node=document.getElementById(`post-service-${id}`);if(node)node.scrollIntoView({behavior:"smooth",block:"center"})},[programs.data]);
 
   const memberName = (id: string) => membersData.data?.members.find((m) => m.id === id)?.full_name ?? "Membre";
   const poleName = (id?: string | null) => id ? (poles.data?.find((p) => p.id === id)?.name ?? "Pôle") : "Transversal";
@@ -397,7 +398,7 @@ function PostService() {
         const incidents = debrief ? decodeIncidents(debrief.incident_type, debrief.incident_detail) : [];
         const closed = (debrief as any)?.status === "closed";
         const myContribution = mineFor(program.id);
-        return <Card key={program.id}>
+        return <Card id={`post-service-${program.id}`} key={program.id} className="scroll-mt-24">
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div><CardTitle className="text-base">{program.title}</CardTitle><p className="text-xs text-muted-foreground">{formatDate(program.start_date)}</p></div>
