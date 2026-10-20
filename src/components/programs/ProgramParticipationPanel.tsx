@@ -946,7 +946,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           }}>Pôles mobilisés</Button>
           {programConfig.data?.detailed_scheduling ? (
             <Button size="sm" variant="outline" onClick={() => {
-              setDraftParticipationMode(programConfig.data.slot_selection_mode === "member" ? "member" : "organizer");
+              setDraftParticipationMode(programConfig.data?.slot_selection_mode === "member" ? "member" : "organizer");
               setModeEditorOpen(true);
             }}>Mode de mobilisation</Button>
           ) : null}
@@ -970,15 +970,15 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
             </p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
-              <button type="button" disabled={saveParticipationMode.isPending || participationModeDataLoading} onClick={() => setDraftParticipationMode("member")} className={`rounded-lg border p-3 text-left text-sm ${(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "member" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
+              <button type="button" disabled={saveParticipationMode.isPending || participationModeDataLoading} onClick={() => setDraftParticipationMode("member")} className={`rounded-lg border p-3 text-left text-sm ${(draftParticipationMode ?? (programConfig.data?.slot_selection_mode === "member" ? "member" : "organizer")) === "member" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
                 <b>Mobilisation globale du programme</b>
                 <span className="mt-1 block text-xs text-muted-foreground">Les personnes sollicitées choisissent les créneaux où elles sont disponibles. Le responsable confirme ensuite les affectations.</span>
-                {(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "member" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Choisi</span> : null}
+                {(draftParticipationMode ?? (programConfig.data?.slot_selection_mode === "member" ? "member" : "organizer")) === "member" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Choisi</span> : null}
               </button>
-              <button type="button" disabled={saveParticipationMode.isPending || participationModeDataLoading} onClick={() => setDraftParticipationMode("organizer")} className={`rounded-lg border p-3 text-left text-sm ${(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "organizer" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
+              <button type="button" disabled={saveParticipationMode.isPending || participationModeDataLoading} onClick={() => setDraftParticipationMode("organizer")} className={`rounded-lg border p-3 text-left text-sm ${(draftParticipationMode ?? (programConfig.data?.slot_selection_mode === "member" ? "member" : "organizer")) === "organizer" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
                 <b>Mobilisation créneau par créneau</b>
                 <span className="mt-1 block text-xs text-muted-foreground">Le responsable sollicite ou affecte des personnes sur des créneaux précis. Les propositions spontanées restent possibles selon les besoins.</span>
-                {(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "organizer" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Choisi</span> : null}
+                {(draftParticipationMode ?? (programConfig.data?.slot_selection_mode === "member" ? "member" : "organizer")) === "organizer" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Choisi</span> : null}
               </button>
             </div>
           )}
