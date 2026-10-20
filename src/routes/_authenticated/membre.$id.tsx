@@ -227,11 +227,10 @@ function MemberPage() {
         is_icc: draft.is_icc,
         is_ejp: draft.is_ejp,
         inactive_note: draft.inactive_note.trim() || null,
-        status: isNew ? "active" : row?.status ?? "active",
       };
 
       const w: any = supabase.from("members");
-      const res = isNew ? await w.insert({ id: memberId, ...payload }) : await w.update(payload).eq("id", memberId);
+      const res = isNew ? await w.insert({ id: memberId, ...payload, status: "active" }) : await w.update(payload).eq("id", memberId);
       if (res.error) throw Error(res.error.message);
 
       const desiredPoles = poleSnapshotFromDraft(isReferent);
