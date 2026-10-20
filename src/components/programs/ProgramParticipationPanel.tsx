@@ -77,6 +77,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const [openSlotDeadlines, setOpenSlotDeadlines] = useState<Record<string, boolean>>({});
   const [openMemberSelectors, setOpenMemberSelectors] = useState<Record<string, boolean>>({});
   const [selectedMembers, setSelectedMembers] = useState<Record<string, string[]>>({});
+  const [modeEditorOpen, setModeEditorOpen] = useState(false);
+  const [draftParticipationMode, setDraftParticipationMode] = useState<"organizer" | "member" | null>(null);
 
   const programConfig = useQuery({
     queryKey: ["program-slot-config", programId],
@@ -328,8 +330,9 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     + (proposals.data ?? []).filter((p: any) => p.status === "pending").length;
   const refusalCount = (proposals.data ?? []).filter((p: any) => p.status === "refused").length
     + activeSolicitations.filter((x: any) => responseMap.get(x.member_id) === "unavailable").length;
-  const withdrawalCount = (proposals.data ?? []).filter((p: any) => p.status === "withdrawn").length
-    + (modes.data ?? []).filter((x: any) => x.process_status === "covered" && x.process_closed_reason === "Affectation retirée").length;
+  // A withdrawn proposal is not an assignment withdrawal (désistement).
+  // Count only actual assignments that were removed.
+  const withdrawalCount = (modes.data ?? []).filter((x: any) => x.process_status === "covered" && x.process_closed_reason === "Affectation retirée").length;
   const supportRows = supportRequests.data ?? [];
   const pendingSupportCount = supportRows.filter((x: any) => x.status === "pending").length;
   const completedSupportCount = supportRows.filter((x: any) => ["accepted", "covered", "completed", "fulfilled"].includes(String(x.status).toLowerCase())).length;
@@ -364,6 +367,13 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         x.assignment_mode === "solicited" &&
         x.process_status !== "covered",
     );
+
+  const participationModeLocked =
+    (proposals.data ?? []).length > 0 ||
+    (responses.data ?? []).length > 0 ||
+    (modes.data ?? []).length > 0;
+  const participationModeDataLoading =
+    proposals.isLoading || responses.isLoading || modes.isLoading;
 
   const refresh = () => {
     for (const queryKey of [
@@ -511,41 +521,24 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const saveParticipationMode = useMutation({
     mutationFn: async (mode: "organizer" | "member") => {
       if (!isStaff) throw new Error("Action réservée aux responsables autorisés.");
-      const db = supabase as any;
-      if (mode === "member") {
-        // In global mode, a solicitation expresses a need for availability,
-        // not a pre-assignment to every slot. Remove only slot links attached
-        // to pending solicited participants; keep confirmed/direct assignments.
-        const { data: assignmentIds, error: assignmentsError } = await db
-          .from("program_assignments").select("id").eq("program_id", programId);
-        if (assignmentsError) throw assignmentsError;
-        const ids = (assignmentIds ?? []).map((x: any) => x.id);
-        if (ids.length) {
-          const { data: solicitedRows, error: rowsError } = await db
-            .from("program_assignment_members")
-            .select("id,assignment_mode,process_status")
-            .in("assignment_id", ids)
-            .eq("assignment_mode", "solicited")
-            .neq("process_status", "covered");
-          if (rowsError) throw rowsError;
-          const participantIds = (solicitedRows ?? []).map((x: any) => x.id);
-          if (participantIds.length) {
-            const { error: linksError } = await db
-              .from("program_assignment_member_slots").delete().in("assignment_member_id", participantIds);
-            if (linksError) throw linksError;
-          }
-        }
+      if (participationModeLocked) {
+        throw new Error("Le mode de mobilisation ne peut plus être modifié : le processus de participation a déjà commencé.");
       }
-      const { error } = await db.from("programs").update({ slot_selection_mode: mode === "member" ? "recipient_choice" : "organizer" }).eq("id", programId);
+      const { error } = await (supabase as any)
+        .from("programs")
+        .update({ slot_selection_mode: mode === "member" ? "recipient_choice" : "organizer" })
+        .eq("id", programId);
       if (error) throw error;
     },
     onSuccess: async () => {
+      setDraftParticipationMode(null);
+      setModeEditorOpen(false);
       await qc.invalidateQueries({ queryKey: ["program-slot-config", programId] });
       await qc.invalidateQueries({ queryKey: ["program-member-slot-chooser", programId] });
       refresh();
-      toast.success("Mode de mobilisation mis à jour.");
+      toast.success("Mode de mobilisation enregistré.");
     },
-    onError: (e: any) => toast.error(e.message || "Impossible de modifier le mode de mobilisation."),
+    onError: (e: any) => toast.error(e.message || "Impossible d’enregistrer le mode de mobilisation."),
   });
 
   const saveGlobalDeadline = useMutation({
@@ -882,30 +875,50 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
             setSelectedPoleIds(assignments.map((a) => a.pole_id));
             setPoleSlotSelection(Object.fromEntries(assignments.map((a) => [a.pole_id, (serviceSlots.data ?? []).map((slot: any) => slot.id)])));
             setPoleEditorOpen(true);
-          }}>Modifier les pôles mobilisés</Button>
+          }}>Pôles mobilisés</Button>
+          {programConfig.data?.detailed_scheduling ? (
+            <Button size="sm" variant="outline" onClick={() => {
+              setDraftParticipationMode(programConfig.data.slot_selection_mode === "member" ? "member" : "organizer");
+              setModeEditorOpen((v) => !v);
+            }}>Mode de mobilisation</Button>
+          ) : null}
           <Button size="sm" variant="outline" onClick={() => setDeadlinesOpen((v) => !v)}>{deadlinesOpen ? "Masquer les délais" : "Délais de réponse"}</Button>
         </div> : null}
       </div>
 
-      {isStaff && programConfig.data?.detailed_scheduling ? (
+      {isStaff && programConfig.data?.detailed_scheduling && modeEditorOpen ? (
         <section className="space-y-3 rounded-lg border border-violet-200 bg-background p-3">
           <div>
             <h4 className="font-bold">Mode de mobilisation</h4>
             <p className="text-xs text-muted-foreground">
-              Choisis si les membres indiquent leurs disponibilités pour l’ensemble du programme ou si la mobilisation reste gérée créneau par créneau. Ce réglage est modifiable.
+              Choisis le mode puis clique sur « Enregistrer ». Le mode est verrouillé dès qu’une proposition, une réponse ou une sollicitation/affectation a commencé, afin de préserver les créneaux et l’historique.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button type="button" disabled={saveParticipationMode.isPending} onClick={() => saveParticipationMode.mutate("member")} className={`rounded-lg border p-3 text-left text-sm ${programConfig.data.slot_selection_mode === "member" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
-              <b>Mobilisation globale du programme</b>
-              <span className="mt-1 block text-xs text-muted-foreground">Les personnes sollicitées choisissent les créneaux où elles sont disponibles. Le responsable confirme ensuite les affectations.</span>
-              {programConfig.data.slot_selection_mode === "member" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Mode sélectionné</span> : null}
-            </button>
-            <button type="button" disabled={saveParticipationMode.isPending} onClick={() => saveParticipationMode.mutate("organizer")} className={`rounded-lg border p-3 text-left text-sm ${programConfig.data.slot_selection_mode !== "member" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
-              <b>Mobilisation créneau par créneau</b>
-              <span className="mt-1 block text-xs text-muted-foreground">Le responsable sollicite ou affecte des personnes sur des créneaux précis. Les propositions spontanées restent possibles selon les besoins.</span>
-              {programConfig.data.slot_selection_mode !== "member" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Mode sélectionné</span> : null}
-            </button>
+          {participationModeLocked ? (
+            <p className="rounded-md border bg-muted/40 p-2 text-sm">
+              Le mode est verrouillé : le processus de participation a déjà commencé. Les choix ne peuvent plus être modifiés.
+            </p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button type="button" disabled={saveParticipationMode.isPending || participationModeDataLoading} onClick={() => setDraftParticipationMode("member")} className={`rounded-lg border p-3 text-left text-sm ${(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "member" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
+                <b>Mobilisation globale du programme</b>
+                <span className="mt-1 block text-xs text-muted-foreground">Les personnes sollicitées choisissent les créneaux où elles sont disponibles. Le responsable confirme ensuite les affectations.</span>
+                {(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "member" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Choisi</span> : null}
+              </button>
+              <button type="button" disabled={saveParticipationMode.isPending || participationModeDataLoading} onClick={() => setDraftParticipationMode("organizer")} className={`rounded-lg border p-3 text-left text-sm ${(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "organizer" ? "border-violet-500 bg-violet-50 dark:bg-violet-950/30" : "bg-background"}`}>
+                <b>Mobilisation créneau par créneau</b>
+                <span className="mt-1 block text-xs text-muted-foreground">Le responsable sollicite ou affecte des personnes sur des créneaux précis. Les propositions spontanées restent possibles selon les besoins.</span>
+                {(draftParticipationMode ?? (programConfig.data.slot_selection_mode === "member" ? "member" : "organizer")) === "organizer" ? <span className="mt-2 block text-xs font-semibold text-violet-700 dark:text-violet-300">Choisi</span> : null}
+              </button>
+            </div>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => { setDraftParticipationMode(null); setModeEditorOpen(false); }}>Annuler</Button>
+            {!participationModeLocked ? (
+              <Button size="sm" disabled={saveParticipationMode.isPending || participationModeDataLoading || !draftParticipationMode} onClick={() => draftParticipationMode && saveParticipationMode.mutate(draftParticipationMode)}>
+                {saveParticipationMode.isPending ? "Enregistrement…" : "Enregistrer"}
+              </Button>
+            ) : null}
           </div>
         </section>
       ) : null}
