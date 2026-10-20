@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { ProgramFullExport } from "@/components/programs/ProgramFullExport";
@@ -75,7 +75,10 @@ const arr = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 function ProgramSheet() {
   const { id } = Route.useParams();
-  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "participation" ? "participation" : "infos");
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab") ?? "infos";
+    return ["infos", "participation", "taches", "equipe", "documents", "timeline", "sur-place", "deplacement"].includes(requested) ? requested : "infos";
+  });
   const { member, isStaff } = useCurrentRole();
   const qc = useQueryClient();
   const programs = useQuery(programsQuery),
