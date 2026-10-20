@@ -468,13 +468,19 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
   const removeAssignment = useMutation({
     mutationFn: async (id: string) => {
-      if (!window.confirm("Retirer cette affectation ? La place redeviendra disponible.")) {
-        throw new Error("ANNULÉ");
-      }
+      // No confirmation dialog for authorized staff. The reason is optional.
+      const reason = window.prompt("Motif du retrait (facultatif) :", "")?.trim() ?? "";
       const { error } = await (supabase as any).rpc("remove_direct_program_assignment", {
         p_assignment_member_id: id,
       });
       if (error) throw error;
+      if (reason) {
+        const { error: reasonError } = await (supabase as any)
+          .from("program_assignment_members")
+          .update({ process_closed_reason: `Affectation retirée — Motif : ${reason}` })
+          .eq("id", id);
+        if (reasonError) throw reasonError;
+      }
     },
     onSuccess: () => {
       refresh();
