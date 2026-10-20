@@ -1014,9 +1014,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                       variant={slotCount < Number(need.required_count) ? "destructive" : "secondary"}
                       className={slotCount >= Number(need.required_count) ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"}
                     >
-                      {slotCount}/{need.required_count} postes couverts
+                      {slotCount}/{need.required_count}
                     </Badge>
-                    <span>{Math.max(0, Number(need.required_count) - slotCount)} à couvrir{pendingCount ? ` · ${pendingCount} sollicitation(s) en attente` : ""}</span>
                   </span>
                   <div className="flex items-center gap-1">
                     <Input className="h-8 w-20" aria-label={`Besoin ${poleNames.get(assignment.pole_id) ?? "du pôle"}`} type="number" min={1} step={1} value={needEdits[`${need.assignment_id}::${slot.id}`] ?? String(need.required_count)} onChange={(e) => setNeedEdits((v) => ({ ...v, [`${need.assignment_id}::${slot.id}`]: e.target.value }))} />
@@ -1159,13 +1158,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
             membershipKeys.has(`${a.pole_id}::${m.id}`),
         );
 
-        const solicitationCandidates = members.filter(
-          (m) =>
-            m.status === "active" &&
-            !m.deleted &&
-            !m.archived &&
-            !activeRowIds.has(m.id),
-        );
+        // Affectation et sollicitation se font uniquement parmi les membres du pôle concerné.
+        const solicitationCandidates = directCandidates;
 
         return (
           <div key={a.id} className="rounded-lg border bg-background p-3">
@@ -1173,9 +1167,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               <b>{poleNames.get(a.pole_id) ?? "Pôle"}</b>
               {required > 0 ? (
                 <Badge variant={covered ? "secondary" : "destructive"}>
-                  {covered
-                    ? `Besoin comblé · ${confirmed.length}/${required}`
-                    : `${confirmed.length}/${required} confirmé${confirmed.length > 1 ? "s" : ""}`}
+                  `${confirmed.length}/${required}`
                 </Badge>
               ) : null}
             </div>
@@ -1336,41 +1328,38 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                   {openMemberSelectors[a.id] ? "Masquer les membres" : "Sélectionner"}
                 </Button>
                 {openMemberSelectors[a.id] ? (
-                  <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
-                    {solicitationCandidates.map((m) => <label key={m.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50">
-                      <input type="checkbox" checked={(selectedMembers[a.id] ?? []).includes(m.id)} onChange={(e) => setSelectedMembers((v) => ({ ...v, [a.id]: e.target.checked ? [...new Set([...(v[a.id] ?? []), m.id])] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
-                      {m.full_name}{membershipKeys.has(`${a.pole_id}::${m.id}`) ? "" : <span className="text-xs text-muted-foreground"> · autre pôle</span>}
-                    </label>)}
-                    {!solicitationCandidates.length ? <p className="p-2 text-xs text-muted-foreground">Aucun membre actif disponible.</p> : null}
+                  <div className="mt-2 max-h-[28rem] space-y-1 overflow-y-auto rounded-md border bg-background p-2">
+                    {solicitationCandidates.map((m) => {
+                      const key = `${a.id}::${m.id}`;
+                      const selected = (selectedMembers[a.id] ?? []).includes(m.id);
+                      const allSlotIds = (serviceSlots.data ?? []).map((slot: any) => slot.id);
+                      const chosenSlotIds = selectedMemberSlots[key] ?? allSlotIds;
+                      const hasTravel = canonicalProgramFormat(programInfo.data?.format ?? "").startsWith("deplacement");
+                      const travelling = ((programInfo.data?.travel_member_ids ?? []) as string[]).includes(m.id);
+                      return <div key={m.id} className="rounded-md">
+                        <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm hover:bg-muted/50">
+                          <input type="checkbox" checked={selected} onChange={(e) => setSelectedMembers((v) => ({ ...v, [a.id]: e.target.checked ? [...new Set([...(v[a.id] ?? []), m.id])] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
+                          <span className="font-medium">{m.full_name}</span>
+                        </label>
+                        {selected ? <div className="ml-6 space-y-3 border-l-2 pl-3 pb-3 text-sm">
+                          {hasTravel ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={travelling} disabled={setMemberTravel.isPending} onChange={(e) => setMemberTravel.mutate({ mid: m.id, travelling: e.target.checked })} />🚐 En déplacement</label> : null}
+                          {allSlotIds.length ? <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allSlotIds.length > 0 && allSlotIds.every((id) => chosenSlotIds.includes(id))} onChange={(e) => setSelectedMemberSlots((v) => ({ ...v, [key]: e.target.checked ? allSlotIds : [] }))} />Tous les créneaux</label>
+                            <div className="grid gap-2 sm:grid-cols-2">{(serviceSlots.data ?? []).map((slot: any) => <label key={slot.id} className="flex cursor-pointer items-start gap-2 rounded border p-2 text-xs">
+                              <input type="checkbox" checked={chosenSlotIds.includes(slot.id)} onChange={(e) => setSelectedMemberSlots((v) => ({ ...v, [key]: e.target.checked ? [...new Set([...(v[key] ?? allSlotIds), slot.id])] : (v[key] ?? allSlotIds).filter((id) => id !== slot.id) }))} />
+                              <span><b className="block">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"}</b>{slot.label || "Créneau"} · {slot.start_time}–{slot.end_time}</span>
+                            </label>)}</div>
+                          </div> : null}
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button size="sm" disabled={assign.isPending || (!!allSlotIds.length && !chosenSlotIds.length)} onClick={() => assign.mutate({ aid: a.id, mid: m.id, slotIds: chosenSlotIds })}>Affecter directement</Button>
+                            <Button size="sm" variant="outline" disabled={solicitProgram.isPending || (!!allSlotIds.length && !chosenSlotIds.length)} onClick={() => solicitProgram.mutate({ aid: a.id, mid: m.id, slotIds: chosenSlotIds })}>Solliciter</Button>
+                          </div>
+                        </div> : null}
+                      </div>;
+                    })}
+                    {!solicitationCandidates.length ? <p className="p-2 text-xs text-muted-foreground">Aucun membre actif disponible dans ce pôle.</p> : null}
                   </div>
                 ) : null}
-                {(selectedMembers[a.id] ?? []).filter((mid) => solicitationCandidates.some((m) => m.id === mid)).map((mid) => {
-                  const key = `${a.id}::${mid}`;
-                  const allSlotIds = (serviceSlots.data ?? []).map((slot: any) => slot.id);
-                  const chosenSlotIds = selectedMemberSlots[key] ?? allSlotIds;
-                  const hasTravel = canonicalProgramFormat(programInfo.data?.format ?? "").startsWith("deplacement");
-                  const travelling = ((programInfo.data?.travel_member_ids ?? []) as string[]).includes(mid);
-                  const canDirectAssign = directCandidates.some((m) => m.id === mid);
-                  const canSolicit = solicitationCandidates.some((m) => m.id === mid);
-                  return <div key={mid} className="mt-2 rounded-md border bg-background px-3 py-3 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2"><b>{names.get(mid) ?? mid}</b>
-                      {hasTravel ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={travelling} disabled={setMemberTravel.isPending} onChange={(e) => setMemberTravel.mutate({ mid, travelling: e.target.checked })} />🚐 En déplacement</label> : null}
-                    </div>
-                    {allSlotIds.length ? <div className="mt-3 space-y-2 border-t pt-3">
-                      <div className="flex items-center justify-between gap-2"><b className="text-xs">Créneaux de {names.get(mid) ?? "ce membre"}</b>
-                        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allSlotIds.length > 0 && allSlotIds.every((id) => chosenSlotIds.includes(id))} onChange={(e) => setSelectedMemberSlots((v) => ({ ...v, [key]: e.target.checked ? allSlotIds : [] }))} />Tous les créneaux</label>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2">{(serviceSlots.data ?? []).map((slot: any) => <label key={slot.id} className="flex cursor-pointer items-start gap-2 rounded border p-2 text-xs">
-                        <input type="checkbox" checked={chosenSlotIds.includes(slot.id)} onChange={(e) => setSelectedMemberSlots((v) => ({ ...v, [key]: e.target.checked ? [...new Set([...(v[key] ?? allSlotIds), slot.id])] : (v[key] ?? allSlotIds).filter((id) => id !== slot.id) }))} />
-                        <span><b className="block">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"}</b>{slot.label || "Créneau"} · {slot.start_time}–{slot.end_time}</span>
-                      </label>)}</div>
-                    </div> : null}
-                    <div className="mt-3 flex flex-wrap justify-end gap-2">
-                      {canDirectAssign ? <Button size="sm" disabled={assign.isPending || (!!allSlotIds.length && !chosenSlotIds.length)} onClick={() => assign.mutate({ aid: a.id, mid, slotIds: chosenSlotIds })}>Affecter directement</Button> : null}
-                      {canSolicit ? <Button size="sm" variant="outline" disabled={solicitProgram.isPending || (!!allSlotIds.length && !chosenSlotIds.length)} onClick={() => solicitProgram.mutate({ aid: a.id, mid, slotIds: chosenSlotIds })}>Solliciter</Button> : null}
-                    </div>
-                  </div>;
-                })}
               </div>
             ) : null}
           </div>
