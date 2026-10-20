@@ -24,6 +24,7 @@ BEGIN
  IF TG_OP='DELETE' THEN j:=to_jsonb(OLD); ELSE j:=to_jsonb(NEW); END IF;
  IF TG_OP='UPDATE' THEN oldj:=to_jsonb(OLD); END IF;
  pid:=coalesce(j->>'program_id',oldj->>'program_id');
+ IF TG_TABLE_NAME='program_assignment_members' THEN SELECT a.program_id INTO pid FROM public.program_assignments a WHERE a.id=(j->>'assignment_id')::uuid; END IF;
  eid:=coalesce(j->>'id',oldj->>'id',pid);
  SELECT coalesce(nullif(btrim(m.full_name),''),'Un membre') INTO actor
  FROM public.members m WHERE m.auth_user_id=auth.uid() AND NOT m.deleted LIMIT 1;
