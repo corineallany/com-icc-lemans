@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +50,12 @@ const proposalLabel: Record<string, string> = {
 
 export function ProgramParticipationPanel({ programId, assignments, members, poles }: Props) {
   const { member, isStaff } = useCurrentRole();
+  useEffect(() => {
+    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (!hash.startsWith("assignment-")) return;
+    const target = document.getElementById(hash);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [assignments.length]);
   const qc = useQueryClient();
   const [note, setNote] = useState<Record<string, string>>({});
   const [direct, setDirect] = useState<Record<string, string[]>>({});
@@ -948,7 +954,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                 const replacementCount = Math.min(replacementRows.length, Math.max(0, Number(need.required_count) - slotCount));
                 const reinforcementCount = Math.max(0, Number(need.required_count) - slotCount - replacementCount);
                 const pendingCount = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && m.assignment_mode === "solicited" && m.process_status !== "covered").length;
-                return <div key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
+                return <div id={`assignment-${need.assignment_id}`} key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm scroll-mt-24">
                   <span className="flex flex-wrap items-center gap-2">
                     <b>{poleNames.get(assignment.pole_id) ?? "Pôle"}</b>
                     <Badge
