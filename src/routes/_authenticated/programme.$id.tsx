@@ -429,7 +429,7 @@ function ProgramSheet() {
       .map((x: any) => slotById.get(x.service_slot_id))
       .filter(Boolean);
   const slotLabel = (slot: any) =>
-    [slot.service_date ?? slot.date, slot.start_time && slot.end_time ? `${String(slot.start_time).slice(0,5)}–${String(slot.end_time).slice(0,5)}` : slot.start_time ?? slot.end_time]
+    [slot.service_date ?? slot.date ?? (programDays.data ?? []).find((day: any) => day.id === slot.program_day_id)?.service_date, slot.start_time && slot.end_time ? `${String(slot.start_time).slice(0,5)}–${String(slot.end_time).slice(0,5)}` : slot.start_time ?? slot.end_time]
       .filter(Boolean)
       .join(" · ") || "Créneau du programme";
   return (
