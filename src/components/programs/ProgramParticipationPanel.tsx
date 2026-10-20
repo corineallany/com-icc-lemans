@@ -154,7 +154,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     if (!hash.startsWith("assignment-") && !hash.startsWith("proposal-")) return;
     const target = document.getElementById(hash);
     if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [assignments.length, serviceSlots.data?.length, slotNeeds.data?.length, proposals.data?.length]);
+  }, [assignments.length, serviceSlots.data?.length, slotNeeds.data?.length]);
 
   const proposals = useQuery({
     queryKey: ["program-proposals", programId],
@@ -168,6 +168,12 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       return data ?? [];
     },
   });
+  useEffect(() => {
+    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (!hash.startsWith("proposal-")) return;
+    const target = document.getElementById(hash);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [proposals.data?.length]);
 
   const responses = useQuery({
     queryKey: ["program-responses", programId],
