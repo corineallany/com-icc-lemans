@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentRole } from "@/hooks/useAuth";
@@ -89,6 +90,9 @@ function MemberPage() {
   const [draft, setDraft] = useState<Draft>(blank());
   const [uploading, setUploading] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [statusValue, setStatusValue] = useState<"active" | "inactive" | "archived">("active");
+  const [statusReason, setStatusReason] = useState("");
 
   const poleNames = useMemo(() => new Map((poles.data ?? []).map((p) => [p.id, p.name])), [poles.data]);
   const activePoles = useMemo(() => (poles.data ?? []).filter((p) => !p.archived), [poles.data]);
@@ -147,6 +151,39 @@ function MemberPage() {
       .map(([pole_id, value]) => ({ pole_id, is_referent: isReferent ? value.referent : false }))
       .sort((a, b) => a.pole_id.localeCompare(b.pole_id));
   }
+
+  const changeStatus = useMutation({
+    mutationFn: async () => {
+      if (!isAdmin || !row) throw Error("Action non autorisée.");
+      const reason = statusReason.trim();
+      const previousStatus = row.status as string;
+      const payload: Record<string, unknown> = {
+        status: statusValue,
+        inactive_note: statusValue === "inactive" ? (reason || row.inactive_note || null) : null,
+      };
+      const { error } = await (supabase as any).from("members").update(payload).eq("id", row.id);
+      if (error) throw Error(error.message);
+      await logAction({
+        action: "member_status_changed",
+        entity: "member",
+        entityId: row.id,
+        detail: `${row.full_name} · ${previousStatus} → ${statusValue}${reason ? ` · Motif : ${reason}` : ""}`,
+        actorName: actor?.full_name,
+      });
+    },
+    onSuccess: async () => {
+      toast.success(statusValue === "active" ? "Membre réactivé manuellement" : statusValue === "inactive" ? "Membre rendu inactif" : "Membre archivé");
+      setStatusOpen(false);
+      setStatusReason("");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["members"] }),
+        qc.invalidateQueries({ queryKey: ["archives-members"] }),
+        qc.invalidateQueries({ queryKey: ["programs"] }),
+        qc.invalidateQueries({ queryKey: ["current-role"] }),
+      ]);
+    },
+    onError: (e: Error) => toast.error("Changement de statut impossible", { description: e.message }),
+  });
 
   const save = useMutation({
     mutationFn: async () => {
@@ -238,7 +275,7 @@ function MemberPage() {
   return <AppShell
     title={isNew ? "Nouveau membre" : row.full_name}
     subtitle={isNew ? "Créer une fiche membre" : "Fiche membre"}
-    actions={!isNew && isAdmin ? <Button size="sm" variant="outline" onClick={() => setEditing(!editing)}>{editing ? "Fermer la modification" : "Modifier"}</Button> : undefined}
+    actions={!isNew && isAdmin ? <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setEditing(!editing)}>{editing ? "Fermer la modification" : "Modifier"}</Button><Button size="sm" variant="secondary" onClick={() => { setStatusValue(row.status ?? "active"); setStatusReason(""); setStatusOpen(true); }}>Gérer le statut</Button></div> : undefined}
   >
     {!editing && row ? <div className="rounded-2xl border bg-card p-5">
       <div className="flex flex-wrap gap-4">
@@ -321,6 +358,35 @@ function MemberPage() {
         <Button disabled={save.isPending || uploading} onClick={() => save.mutate()}>Enregistrer</Button>
       </div>
     </div>}
+
+    <Dialog open={statusOpen} onOpenChange={setStatusOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Gérer le statut de {row?.full_name}</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Les indisponibilités datées restent gérées séparément. Un membre inactif ne sera jamais réactivé automatiquement : seule une action manuelle peut le rendre actif.</p>
+          <Field label="Statut du membre">
+            <Select value={statusValue} onValueChange={(v) => setStatusValue(v as "active" | "inactive" | "archived")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Actif</SelectItem>
+                <SelectItem value="inactive">Inactif</SelectItem>
+                <SelectItem value="archived">Archivé</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          <div className="rounded-lg bg-muted/40 p-3 text-sm">
+            {statusValue === "active" ? "Le membre est dans l’effectif actif et peut être mobilisé selon ses disponibilités." : statusValue === "inactive" ? "Le membre reste dans la COM, mais il est exclu des nouvelles propositions et affectations jusqu’à sa réactivation manuelle." : "Le membre sort de la gestion courante. Sa fiche et son historique sont conservés dans les archives."}
+          </div>
+          <Field label="Motif / précision (facultatif)">
+            <Textarea rows={3} value={statusReason} onChange={(e) => setStatusReason(e.target.value)} placeholder="Ex. déménagement, suspension, situation temporaire sans date de fin…"/>
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setStatusOpen(false)}>Annuler</Button>
+          <Button disabled={changeStatus.isPending || (statusValue === row?.status && !statusReason.trim())} onClick={() => changeStatus.mutate()}>{changeStatus.isPending ? "Enregistrement…" : "Confirmer le statut"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     {draft.photo_url ? <ImageCropper open={cropOpen} onOpenChange={setCropOpen} src={draft.photo_url} value={draft.photo_crop} aspect="1 / 1" title="Ajuster la photo du trombinoscope" onSave={(photo_crop) => setDraft({ ...draft, photo_crop })} /> : null}
   </AppShell>;
