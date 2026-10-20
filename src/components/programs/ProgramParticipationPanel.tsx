@@ -219,6 +219,29 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     },
   });
 
+  const withdrawalRequests = useQuery({
+    queryKey: ["program-assignment-withdrawal-requests", programId],
+    queryFn: async () => {
+      const db = supabase as any;
+      const assignmentIds = assignments.map((a) => a.id);
+      if (!assignmentIds.length) return [];
+      const { data: rows, error: rowsError } = await db
+        .from("program_assignment_members")
+        .select("id,assignment_id")
+        .in("assignment_id", assignmentIds);
+      if (rowsError) throw rowsError;
+      const ids = (rows ?? []).map((row: any) => row.id);
+      if (!ids.length) return [];
+      const { data, error } = await db
+        .from("program_assignment_withdrawal_requests")
+        .select("*")
+        .in("assignment_member_id", ids)
+        .order("requested_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const assignmentMemberSlots = useQuery({
     queryKey: ["program-staffing-member-slots", programId, (modes.data ?? []).map((x: any) => x.id).sort().join(",")],
     enabled: (modes.data ?? []).length > 0,
@@ -346,6 +369,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     for (const queryKey of [
       ["program-proposals", programId],
       ["program-assignment-modes", programId],
+      ["program-assignment-withdrawal-requests", programId],
       ["program-responses", programId],
       ["program-pole-memberships", programId],
       ["program-sheet-participation-modes", programId],
@@ -796,6 +820,42 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     });
   };
 
+  const requestAssignmentWithdrawal = useMutation({
+    mutationFn: async (assignmentMemberId: string) => {
+      const reason = window.prompt("Motif du désistement (facultatif) :", "")?.trim() ?? "";
+      const { error } = await (supabase as any).rpc("request_program_assignment_withdrawal", {
+        p_assignment_member_id: assignmentMemberId,
+        p_reason: reason || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refresh();
+      toast.success("Demande de retrait envoyée. L’affectation reste active jusqu’à décision.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible d’envoyer la demande."),
+  });
+
+  const decideAssignmentWithdrawal = useMutation({
+    mutationFn: async ({ id, decision }: { id: string; decision: "approved" | "rejected" }) => {
+      const reason = window.prompt(
+        decision === "approved" ? "Motif de validation (facultatif) :" : "Motif du refus (facultatif) :",
+        "",
+      )?.trim() ?? "";
+      const { error } = await (supabase as any).rpc("decide_program_assignment_withdrawal", {
+        p_request_id: id,
+        p_decision: decision,
+        p_reason: reason || null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_data: any, variables: any) => {
+      refresh();
+      toast.success(variables.decision === "approved" ? "Désistement validé, affectation clôturée." : "Demande de retrait refusée.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible de traiter la demande."),
+  });
+
   const withdraw = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await (supabase as any).rpc("withdraw_program_proposal", {
@@ -1060,15 +1120,35 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                       ? "Affecté directement · aucune réponse requise"
                       : "Proposition acceptée"}
                   </span>
-                  {isStaff ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => removeAssignment.mutate(x.id)}
-                    >
-                      Retirer l’affectation
-                    </Button>
-                  ) : null}
+                  <span className="flex flex-wrap gap-1">
+                    {isStaff ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeAssignment.mutate(x.id)}
+                      >
+                        Retirer l’affectation
+                      </Button>
+                    ) : member?.id === x.member_id ? (
+                      (() => {
+                        const request = (withdrawalRequests.data ?? []).find((r: any) => r.assignment_member_id === x.id && r.status === "pending");
+                        return request ? (
+                          <Badge variant="secondary">Désistement en attente de validation</Badge>
+                        ) : (
+                          <Button size="sm" variant="outline" onClick={() => requestAssignmentWithdrawal.mutate(x.id)}>
+                            Demander mon désistement
+                          </Button>
+                        );
+                      })()
+                    ) : null}
+                    {isStaff ? (withdrawalRequests.data ?? []).filter((r: any) => r.assignment_member_id === x.id && r.status === "pending").map((r: any) => (
+                      <span key={r.id} className="flex flex-wrap items-center gap-1 rounded-md border px-2 py-1">
+                        <span className="text-xs">Désistement demandé{r.reason ? ` : ${r.reason}` : ""}</span>
+                        <Button size="sm" onClick={() => decideAssignmentWithdrawal.mutate({ id: r.id, decision: "approved" })}>Valider</Button>
+                        <Button size="sm" variant="outline" onClick={() => decideAssignmentWithdrawal.mutate({ id: r.id, decision: "rejected" })}>Refuser</Button>
+                      </span>
+                    )) : null}
+                  </span>
                 </div>
               ))}
 
