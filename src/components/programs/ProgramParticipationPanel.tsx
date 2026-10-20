@@ -50,12 +50,7 @@ const proposalLabel: Record<string, string> = {
 
 export function ProgramParticipationPanel({ programId, assignments, members, poles }: Props) {
   const { member, isStaff } = useCurrentRole();
-  useEffect(() => {
-    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
-    if (!hash.startsWith("assignment-")) return;
-    const target = document.getElementById(hash);
-    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [assignments.length]);
+
   const qc = useQueryClient();
   const [note, setNote] = useState<Record<string, string>>({});
   const [direct, setDirect] = useState<Record<string, string[]>>({});
@@ -154,6 +149,12 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
       return data ?? [];
     },
   });
+  useEffect(() => {
+    const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (!hash.startsWith("assignment-")) return;
+    const target = document.getElementById(hash);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [assignments.length, serviceSlots.data?.length, slotNeeds.data?.length]);
 
   const proposals = useQuery({
     queryKey: ["program-proposals", programId],
