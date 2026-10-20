@@ -1166,7 +1166,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               <b>{poleNames.get(a.pole_id) ?? "Pôle"}</b>
               {required > 0 ? (
                 <Badge variant={covered ? "secondary" : "destructive"}>
-                  `${confirmed.length}/${required}`
+                  {confirmed.length}/{required}
                 </Badge>
               ) : null}
             </div>
