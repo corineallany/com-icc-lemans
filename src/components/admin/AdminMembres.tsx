@@ -62,9 +62,6 @@ export function AdminMembres() {
   const queryClient = useQueryClient();
   const { member: actor } = useCurrentRole();
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [statusTarget, setStatusTarget] = useState<Member | null>(null);
-  const [statusValue, setStatusValue] = useState<MemberStatus>("active");
-  const [statusReason, setStatusReason] = useState("");
   const [search, setSearch] = useState("");
   const activePoles = useMemo(() => (poles.data ?? []).filter((p) => !p.archived), [poles.data]);
   const poleName = useMemo(() => new Map((poles.data ?? []).map((p) => [p.id, p.name])), [poles.data]);
@@ -96,41 +93,6 @@ export function AdminMembres() {
     onError:(error:Error)=>toast.error("Enregistrement impossible",{description:error.message}),
   });
 
-  const changeStatus = useMutation({
-    mutationFn: async () => {
-      if (!statusTarget) throw new Error("Aucun membre sélectionné.");
-      const previousStatus = statusTarget.status;
-      const reason = statusReason.trim();
-      const payload: Record<string, unknown> = { status: statusValue };
-      if (reason) payload.inactive_note = reason;
-      const { error } = await (supabase as any).from("members").update(payload).eq("id", statusTarget.id);
-      if (error) throw new Error(error.message);
-      await logAction({
-        action: "member_status_changed",
-        entity: "member",
-        entityId: statusTarget.id,
-        detail: `${statusTarget.full_name} · ${STATUSES.find((s)=>s.value===previousStatus)?.label ?? previousStatus} → ${STATUSES.find((s)=>s.value===statusValue)?.label ?? statusValue}${reason ? ` · Motif : ${reason}` : ""}`,
-        actorName: actor?.full_name,
-      });
-    },
-    onSuccess: () => {
-      toast.success(statusValue === "archived" ? "Membre archivé" : statusValue === "inactive" ? "Membre rendu inactif" : "Membre réactivé");
-      setStatusTarget(null);
-      setStatusReason("");
-      queryClient.invalidateQueries({ queryKey: ["members"] });
-      queryClient.invalidateQueries({ queryKey: ["archives-members"] });
-      queryClient.invalidateQueries({ queryKey: ["programs"] });
-      queryClient.invalidateQueries({ queryKey: ["current-role"] });
-    },
-    onError: (error: Error) => toast.error("Changement de statut impossible", { description: error.message }),
-  });
-
-  function openStatus(row: Member) {
-    setStatusTarget(row);
-    setStatusValue(row.status);
-    setStatusReason("");
-  }
-
   function edit(row: Member & { poles: { pole_id: string; is_referent: boolean }[] }) {
     const m=row as any; const map:Draft["poles"]={}; for(const link of row.poles) map[link.pole_id]={selected:true,referent:link.is_referent};
     setDraft({id:row.id,first_name:row.first_name??"",last_name:row.last_name??"",base_role:row.base_role,status:row.status,login_email:row.login_email??"",affiliations:row.affiliations??"",inactive_note:row.inactive_note??"",photo_url:row.photo_url??"",arrival_month:m.arrival_month?String(m.arrival_month):"",arrival_year:m.arrival_year?String(m.arrival_year):"",birthday_day:m.birthday_day?String(m.birthday_day):"",birthday_month:m.birthday_month?String(m.birthday_month):"",is_ejp:row.is_ejp,is_icc:row.is_icc,training_done:row.training_done,training_start:row.training_start??"",training_end_planned:row.training_end_planned??"",training_end_effective:row.training_end_effective??"",poles:map});
@@ -140,9 +102,8 @@ export function AdminMembres() {
 
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><Input placeholder="Rechercher un équipier…" value={search} onChange={(e)=>setSearch(e.target.value)} className="max-w-xs"/><Button size="sm" onClick={()=>setDraft(emptyDraft())}>Nouvel équipier</Button></div>
-    {rows.length===0?<EmptyState title="Aucun équipier trouvé"/>:<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((row:any)=><Card key={row.id} className={row.status==="active"?"":"opacity-60"}><CardHeader className="pb-2"><div className="flex items-start justify-between gap-2"><CardTitle className="text-base">{row.full_name}</CardTitle><Badge variant="secondary">{ROLE_LABEL[row.base_role]}</Badge></div><p className="text-xs text-muted-foreground">{row.status==="active"&&row.training_start&&!row.training_done?"En formation":STATUSES.find((s)=>s.value===row.status)?.label}{row.login_email?` · ${row.login_email}`:""}</p></CardHeader><CardContent className="space-y-3"><p className="text-sm text-muted-foreground">{row.poles.length===0?"Aucun pôle":row.poles.map((l:any)=>`${poleName.get(l.pole_id)??"Pôle"}${l.is_referent?" (réf.)":""}`).join(", ")}</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={()=>edit(row)}>Modifier</Button><Button size="sm" variant="secondary" onClick={()=>openStatus(row)}>Gérer le statut</Button></div></CardContent></Card>)}</div>}
+    {rows.length===0?<EmptyState title="Aucun équipier trouvé"/>:<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{rows.map((row:any)=><Card key={row.id} className={row.status==="active"?"":"opacity-60"}><CardHeader className="pb-2"><div className="flex items-start justify-between gap-2"><CardTitle className="text-base">{row.full_name}</CardTitle><Badge variant="secondary">{ROLE_LABEL[row.base_role]}</Badge></div><p className="text-xs text-muted-foreground">{row.status==="active"&&row.training_start&&!row.training_done?"En formation":STATUSES.find((s)=>s.value===row.status)?.label}{row.login_email?` · ${row.login_email}`:""}</p></CardHeader><CardContent className="space-y-3"><p className="text-sm text-muted-foreground">{row.poles.length===0?"Aucun pôle":row.poles.map((l:any)=>`${poleName.get(l.pole_id)??"Pôle"}${l.is_referent?" (réf.)":""}`).join(", ")}</p><Button size="sm" variant="outline" onClick={()=>edit(row)}>Modifier</Button></CardContent></Card>)}</div>}
 
-    <Dialog open={statusTarget!==null} onOpenChange={(open)=>{if(!open){setStatusTarget(null);setStatusReason("")}}}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Gérer le statut{statusTarget? ` · ${statusTarget.full_name}` : ""}</DialogTitle></DialogHeader>{statusTarget?<div className="space-y-4"><p className="text-sm text-muted-foreground">Le statut ne change pas les données personnelles du membre. Une inactivité ne se termine jamais automatiquement : il faudra le réactiver manuellement.</p><Field label="Nouveau statut"><Select value={statusValue} onValueChange={(v)=>setStatusValue(v as MemberStatus)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{STATUSES.map((s)=><SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></Field><div className="rounded-lg bg-muted/40 p-3 text-sm">{statusValue==="active"?"Le membre reste dans l’effectif actif et peut être mobilisé selon ses disponibilités.":statusValue==="inactive"?"Le membre reste dans la COM, mais doit être exclu des nouvelles propositions et affectations tant qu’il n’est pas réactivé manuellement.":"Le membre est retiré de la gestion courante et conservé dans Archives & corbeille."}</div><Field label="Motif / précision (facultatif)"><Textarea rows={3} value={statusReason} onChange={(e)=>setStatusReason(e.target.value)} placeholder="Ex. déménagement, suspension, pause temporaire…"/></Field></div>:null}<DialogFooter><Button variant="ghost" onClick={()=>{setStatusTarget(null);setStatusReason("")}}>Annuler</Button><Button disabled={changeStatus.isPending||!statusTarget||statusValue===statusTarget.status} onClick={()=>changeStatus.mutate()}>{changeStatus.isPending?"Enregistrement…":"Confirmer le statut"}</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={draft!==null} onOpenChange={(open)=>(open?null:setDraft(null))}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>{draft?.id?"Modifier l'équipier":"Nouvel équipier"}</DialogTitle></DialogHeader>{draft?<div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-2"><Field label="Prénom"><Input value={draft.first_name} onChange={(e)=>setDraft({...draft,first_name:e.target.value})}/></Field><Field label="Nom"><Input value={draft.last_name} onChange={(e)=>setDraft({...draft,last_name:e.target.value})}/></Field></div>
       <div className="grid gap-3 sm:grid-cols-2"><Field label="Rôle organisationnel"><div className="min-h-10 rounded-md border bg-muted/30 px-3 py-2 text-sm"><b>{Object.values(draft.poles).some((v)=>v.selected&&v.referent)?"Référent":"Équipier"}</b><p className="text-xs text-muted-foreground">Automatique selon la structure. La Direction se gère dans Paramètres.</p></div></Field></div>
