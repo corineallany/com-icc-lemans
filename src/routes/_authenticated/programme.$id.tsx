@@ -420,7 +420,7 @@ function ProgramSheet() {
       ["direct", "proposal"].includes(r.assignment_mode) &&
       !["covered", "withdrawn", "refused"].includes(r.process_status),
   );
-  const confirmed = [...new Set(actualAssignments.map((r: any) => r.member_id))] as string[];
+  const actualTeamMembers = [...new Set(actualAssignments.map((r: any) => r.member_id))] as string[];
   const hasTravel = canonicalProgramFormat(program.format).startsWith("deplacement");
   const slotById = new Map((serviceSlots.data ?? []).map((slot: any) => [slot.id, slot]));
   const slotsForAssignmentMember = (assignmentMemberId: string) =>
@@ -432,52 +432,6 @@ function ProgramSheet() {
     [slot.service_date ?? slot.date, slot.start_time && slot.end_time ? `${String(slot.start_time).slice(0,5)}–${String(slot.end_time).slice(0,5)}` : slot.start_time ?? slot.end_time]
       .filter(Boolean)
       .join(" · ") || "Créneau du programme";
-  const teamRow = (mid: string) => (
-    <div
-      key={mid}
-      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
-    >
-      <div>
-        <b>{memberName.get(mid) ?? mid}</b>
-        <p className="text-xs text-muted-foreground">{participationLabel(mid)}</p>
-      </div>
-      {isStaff ? (
-        <div className="flex flex-wrap gap-1">
-          <Button
-            size="sm"
-            variant={teamLocation(mid) === "travel" ? "default" : "outline"}
-            onClick={() => setTeamLocation.mutate({ memberId: mid, location: "travel" })}
-          >
-            🚐 En déplacement
-          </Button>
-          <Button
-            size="sm"
-            variant={teamLocation(mid) === "onsite" ? "default" : "outline"}
-            onClick={() => setTeamLocation.mutate({ memberId: mid, location: "onsite" })}
-          >
-            🏠 Sur place
-          </Button>
-          {teamLocation(mid) ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setTeamLocation.mutate({ memberId: mid, location: null })}
-            >
-              À préciser
-            </Button>
-          ) : null}
-        </div>
-      ) : (
-        <Badge variant="outline">
-          {teamLocation(mid) === "travel"
-            ? "🚐 En déplacement"
-            : teamLocation(mid) === "onsite"
-              ? "🏠 Sur place"
-              : "À préciser"}
-        </Badge>
-      )}
-    </div>
-  );
   return (
     <AppShell
       title={program.title}
@@ -697,21 +651,21 @@ function ProgramSheet() {
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
-              {actualAssignments.length ? actualAssignments.map((r: any) => {
-                const assignment = (program.assignments ?? []).find((a) => a.id === r.assignment_id);
-                const linkedSlots = slotsForAssignmentMember(r.id);
-                const isTravelling = hasTravel && teamLocation(r.member_id) === "travel";
+              {actualTeamMembers.length ? actualTeamMembers.map((mid) => {
+                const memberAssignments = actualAssignments.filter((r: any) => r.member_id === mid);
+                const poleIds = [...new Set(memberAssignments.map((r: any) => (program.assignments ?? []).find((a) => a.id === r.assignment_id)?.pole_id).filter(Boolean))] as string[];
+                const poleLabels = poleIds.map((poleId) => poleName.get(poleId) ?? "Pôle");
+                const linkedSlots = [...new Map(memberAssignments.flatMap((r: any) => slotsForAssignmentMember(r.id)).map((slot: any) => [slot.id, slot])).values()];
+                const tasks = [...new Set(memberAssignments.map((r: any) => (program.assignments ?? []).find((a) => a.id === r.assignment_id)?.tasks).filter(Boolean))];
+                const modes = [...new Set(memberAssignments.map((r: any) => r.assignment_mode === "direct" ? "Affectation directe" : "Proposition acceptée"))];
+                const isTravelling = hasTravel && teamLocation(mid) === "travel";
                 return (
-                  <div key={r.id} className="rounded-lg border p-3">
+                  <div key={mid} className="rounded-lg border p-3">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <b>{memberName.get(r.member_id) ?? r.member_id}</b>
-                        <p className="text-sm text-muted-foreground">
-                          {poleName.get(assignment?.pole_id ?? "") ?? "Pôle"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {r.assignment_mode === "direct" ? "Affectation directe" : "Proposition acceptée"}
-                        </p>
+                        <b>{memberName.get(mid) ?? mid}</b>
+                        <p className="text-sm text-muted-foreground">{poleLabels.join(", ") || "Pôle non précisé"}</p>
+                        <p className="text-xs text-muted-foreground">{modes.join(" · ")}</p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {isTravelling ? <Badge>🚐 En déplacement</Badge> : null}
@@ -720,7 +674,7 @@ function ProgramSheet() {
                             <input
                               type="checkbox"
                               checked={isTravelling}
-                              onChange={(e) => setTeamLocation.mutate({ memberId: r.member_id, location: e.target.checked ? "travel" : null })}
+                              onChange={(e) => setTeamLocation.mutate({ memberId: mid, location: e.target.checked ? "travel" : null })}
                             />
                             En déplacement
                           </label>
@@ -732,7 +686,7 @@ function ProgramSheet() {
                         <Badge key={slot.id} variant="secondary">{slotLabel(slot)}</Badge>
                       )) : <span className="text-xs text-muted-foreground">{(serviceSlots.data ?? []).length ? "Créneau individuel non renseigné" : "Besoin du programme"}</span>}
                     </div>
-                    {assignment?.tasks ? <p className="mt-2 text-sm">{assignment.tasks}</p> : null}
+                    {tasks.length ? <p className="mt-2 text-sm">{tasks.join(" · ")}</p> : null}
                   </div>
                 );
               }) : <EmptyState title="Aucune affectation confirmée" />}
