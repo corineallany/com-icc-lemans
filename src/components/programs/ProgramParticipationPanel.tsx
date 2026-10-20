@@ -947,12 +947,12 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
       {isStaff && displaySlots.length ? (
         <div className="space-y-2 rounded-lg border bg-background p-3">
-          <h4 className="font-bold">Besoin par créneau</h4>
+          <h4 className="font-bold">{(serviceSlots.data ?? []).length ? "Besoin par créneau" : "Besoin du programme"}</h4>
           {(displaySlots as any[]).map((slot: any) => {
             const needs = displayNeeds.filter((n: any) => n.service_slot_id === slot.id);
             if (!needs.length) return null;
             return <div key={slot.id} className="rounded-md bg-muted/30 p-2">
-              <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div>
+              {!slot.is_legacy ? <div className="font-semibold text-sm">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"} · {slot.label || `${slot.start_time}–${slot.end_time}`}</div> : null}
               {needs.map((need: any) => {
                 const assignment = assignments.find((x) => x.id === need.assignment_id);
                 if (!assignment) return null;
