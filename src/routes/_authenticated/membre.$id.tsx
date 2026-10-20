@@ -159,7 +159,7 @@ function MemberPage() {
       const previousStatus = row.status as string;
       const payload: Record<string, unknown> = {
         status: statusValue,
-        inactive_note: statusValue === "inactive" ? (reason || row.inactive_note || null) : null,
+        inactive_note: reason || (statusValue === "inactive" ? row.inactive_note || null : null),
       };
       const { error } = await (supabase as any).from("members").update(payload).eq("id", row.id);
       if (error) throw Error(error.message);
@@ -171,16 +171,15 @@ function MemberPage() {
         actorName: actor?.full_name,
       });
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       toast.success(statusValue === "active" ? "Membre réactivé manuellement" : statusValue === "inactive" ? "Membre rendu inactif" : "Membre archivé");
       setStatusOpen(false);
       setStatusReason("");
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["members"] }),
-        qc.invalidateQueries({ queryKey: ["archives-members"] }),
-        qc.invalidateQueries({ queryKey: ["programs"] }),
-        qc.invalidateQueries({ queryKey: ["current-role"] }),
-      ]);
+      qc.setQueryData(["members"], (old: any) => old ? ({ ...old, members: (old.members ?? []).map((m: any) => m.id === row?.id ? { ...m, status: statusValue, inactive_note: statusReason.trim() || (statusValue === "inactive" ? m.inactive_note : null) } : m) }) : old);
+      void qc.invalidateQueries({ queryKey: ["members"] });
+      void qc.invalidateQueries({ queryKey: ["archives-members"] });
+      void qc.invalidateQueries({ queryKey: ["programs"] });
+      void qc.invalidateQueries({ queryKey: ["current-role"] });
     },
     onError: (e: Error) => toast.error("Changement de statut impossible", { description: e.message }),
   });
