@@ -804,7 +804,6 @@ function Sollicitations() {
     }
     const { error: responseError } = await (supabase as any).from("program_member_responses").upsert(
       {
-        id: `${s.program_id}__${memberId}`,
         program_id: s.program_id,
         member_id: memberId,
         status: "available",
