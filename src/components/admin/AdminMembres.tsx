@@ -79,13 +79,13 @@ export function AdminMembres() {
       if(month!==null&&(month<1||month>12)) throw new Error("Le mois d'anniversaire doit être compris entre 1 et 12.");
       const id=value.id??newId("m");
       const payload:any={
-        first_name:first||null,last_name:last||null,full_name:fullName,base_role:Object.values(value.poles).some((v)=>v.selected&&v.referent)?"referent":"equipier",status:value.status,
+        first_name:first||null,last_name:last||null,full_name:fullName,base_role:Object.values(value.poles).some((v)=>v.selected&&v.referent)?"referent":"equipier",
         login_email:value.login_email.trim()||null,affiliations:value.affiliations.trim()||null,inactive_note:value.inactive_note.trim()||null,
         photo_url:value.photo_url.trim()||null,arrival_month:value.arrival_month?Number(value.arrival_month):null,arrival_year:value.arrival_year?Number(value.arrival_year):null,
         birthday_day:day,birthday_month:month,is_ejp:value.is_ejp,is_icc:value.is_icc,training_done:value.training_done,
         training_start:value.training_start||null,training_end_planned:value.training_end_planned||null,training_end_effective:value.training_end_effective||null,
       };
-      const write=value.id?await supabase.from("members").update(payload).eq("id",value.id):await supabase.from("members").insert({id,...payload});
+      const write=value.id?await supabase.from("members").update(payload).eq("id",value.id):await supabase.from("members").insert({id,...payload,status:value.status});
       if(write.error) throw new Error(write.error.message);
       const {error:delError}=await supabase.from("member_poles").delete().eq("member_id",id); if(delError) throw new Error(delError.message);
       const rowsToInsert=Object.entries(value.poles).filter(([,v])=>v.selected).map(([poleId,v])=>({member_id:id,pole_id:poleId,is_referent:v.referent}));
