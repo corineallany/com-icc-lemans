@@ -16,6 +16,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ProgramMemberSlotChooser } from "@/components/programs/ProgramMemberSlotChooser";
+import { canonicalProgramFormat } from "@/lib/programLabels";
 
 type Assignment = {
   id: string;
@@ -78,6 +79,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   const [openSlotDeadlines, setOpenSlotDeadlines] = useState<Record<string, boolean>>({});
   const [openMemberSelectors, setOpenMemberSelectors] = useState<Record<string, boolean>>({});
   const [selectedMembers, setSelectedMembers] = useState<Record<string, string[]>>({});
+  const [selectedMemberSlots, setSelectedMemberSlots] = useState<Record<string, string[]>>({});
   const [modeEditorOpen, setModeEditorOpen] = useState(false);
   const [draftParticipationMode, setDraftParticipationMode] = useState<"organizer" | "member" | null>(null);
 
@@ -99,7 +101,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("programs")
-        .select("id,title,start_date,start_time,end_date,end_time,detailed_scheduling,response_deadline,response_deadline_at,response_deadline_offset_value,response_deadline_offset_unit,response_deadline_anchor")
+        .select("id,title,start_date,start_time,end_date,end_time,format,travel_member_ids,detailed_scheduling,response_deadline,response_deadline_at,response_deadline_offset_value,response_deadline_offset_unit,response_deadline_anchor")
         .eq("id", programId)
         .single();
       if (error) throw error;
@@ -433,51 +435,80 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     onError: (e: any) => toast.error(e.message),
   });
 
+  const linkMemberToSlots = async (assignmentId: string, memberId: string, slotIds: string[]) => {
+    if (!slotIds.length) return;
+    const { data: participation, error: participationError } = await (supabase as any)
+      .from("program_assignment_members").select("id").eq("assignment_id", assignmentId).eq("member_id", memberId).maybeSingle();
+    if (participationError) throw participationError;
+    if (!participation?.id) throw new Error("Participation créée mais impossible de retrouver son identifiant.");
+    const chosen = (serviceSlots.data ?? []).filter((slot: any) => slotIds.includes(slot.id));
+    if (!chosen.length) return;
+    const { data: existing, error: existingError } = await (supabase as any).from("program_assignment_member_slots")
+      .select("service_slot_id").eq("assignment_member_id", participation.id);
+    if (existingError) throw existingError;
+    const existingIds = new Set((existing ?? []).map((x: any) => x.service_slot_id));
+    const rows = chosen.filter((slot: any) => !existingIds.has(slot.id)).map((slot: any) => ({
+      assignment_member_id: participation.id, service_slot_id: slot.id, program_day_id: slot.program_day_id,
+      start_time: slot.start_time, end_time: slot.end_time,
+    }));
+    if (rows.length) {
+      const { error } = await (supabase as any).from("program_assignment_member_slots").insert(rows);
+      if (error) throw error;
+    }
+  };
+
   const assign = useMutation({
-    mutationFn: async ({ aid, mid }: { aid: string; mid: string }) => {
+    mutationFn: async ({ aid, mid, slotIds }: { aid: string; mid: string; slotIds: string[] }) => {
       const assignment = assignments.find((x) => x.id === aid);
       if (!assignment || !membershipKeys.has(`${assignment.pole_id}::${mid}`)) {
-        throw new Error(
-          "Ce membre n’est pas rattaché à ce pôle. Pour un renfort d’un autre pôle, utilisez Solliciter.",
-        );
+        throw new Error("Ce membre n’est pas rattaché à ce pôle. Pour un renfort d’un autre pôle, utilise « Solliciter ».");
       }
-      if (
-        responseMap.get(mid) === "unavailable" &&
-        !window.confirm(
-          "Cette personne avait refusé. Confirmer tout de même l’affectation directe ?",
-        )
-      ) {
+      if (responseMap.get(mid) === "unavailable" && !window.confirm("Cette personne avait refusé. Confirmer tout de même l’affectation directe ?")) {
         throw new Error("ANNULÉ");
       }
       const { error } = await (supabase as any).rpc("direct_assign_program_member", {
-        p_assignment_id: aid,
-        p_member_id: mid,
-        p_source: "direct",
+        p_assignment_id: aid, p_member_id: mid, p_source: "direct",
       });
       if (error) throw error;
+      await linkMemberToSlots(aid, mid, slotIds);
     },
     onSuccess: () => {
       refresh();
       toast.success("Affectation directe confirmée");
     },
     onError: (e: any) => {
-      if (e.message !== "ANNULÉ") toast.error(e.message);
+      if (e.message !== "ANNULÉ") toast.error([e.message, e.code ? `(${e.code})` : ""].filter(Boolean).join(" "));
     },
   });
 
   const solicitProgram = useMutation({
-    mutationFn: async ({ aid, mid }: { aid: string; mid: string }) => {
+    mutationFn: async ({ aid, mid, slotIds }: { aid: string; mid: string; slotIds: string[] }) => {
       const { error } = await (supabase as any).rpc("solicit_program_member", {
-        p_assignment_id: aid,
-        p_member_id: mid,
+        p_assignment_id: aid, p_member_id: mid,
       });
       if (error) throw error;
+      await linkMemberToSlots(aid, mid, slotIds);
     },
     onSuccess: () => {
       refresh();
       toast.success("Sollicitation de participation envoyée");
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error([e.message || "Impossible d’envoyer la sollicitation.", e.code ? `(${e.code})` : ""].filter(Boolean).join(" ")),
+  });
+
+  const setMemberTravel = useMutation({
+    mutationFn: async ({ mid, travelling }: { mid: string; travelling: boolean }) => {
+      const current = (programInfo.data?.travel_member_ids ?? []) as string[];
+      const next = travelling ? [...new Set([...current, mid])] : current.filter((id) => id !== mid);
+      const { error } = await (supabase as any).from("programs").update({ travel_member_ids: next }).eq("id", programId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["program-staffing-info", programId] });
+      await qc.invalidateQueries({ queryKey: ["programs"] });
+      toast.success("Déplacement mis à jour.");
+    },
+    onError: (e: any) => toast.error(e.message || "Impossible de modifier le déplacement."),
   });
 
   const cancelSolicitation = useMutation({
@@ -1281,22 +1312,40 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                 </Button>
                 {openMemberSelectors[a.id] ? (
                   <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-md border bg-background p-2">
-                    {directCandidates.map((m) => <label key={m.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50">
+                    {solicitationCandidates.map((m) => <label key={m.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50">
                       <input type="checkbox" checked={(selectedMembers[a.id] ?? []).includes(m.id)} onChange={(e) => setSelectedMembers((v) => ({ ...v, [a.id]: e.target.checked ? [...new Set([...(v[a.id] ?? []), m.id])] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
-                      {m.full_name}
+                      {m.full_name}{membershipKeys.has(`${a.pole_id}::${m.id}`) ? "" : <span className="text-xs text-muted-foreground"> · autre pôle</span>}
                     </label>)}
-                    {!directCandidates.length ? <p className="p-2 text-xs text-muted-foreground">Aucun membre disponible dans ce pôle.</p> : null}
+                    {!solicitationCandidates.length ? <p className="p-2 text-xs text-muted-foreground">Aucun membre actif disponible.</p> : null}
                   </div>
                 ) : null}
-                {(selectedMembers[a.id] ?? []).filter((mid) => directCandidates.some((m) => m.id === mid)).map((mid) => (
-                  <div key={mid} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm">
-                    <b>{names.get(mid) ?? mid}</b>
-                    <div className="flex gap-2">
-                      <Button size="sm" disabled={assign.isPending} onClick={() => assign.mutate({ aid: a.id, mid })}>Affecter</Button>
-                      <Button size="sm" variant="outline" disabled={solicitProgram.isPending} onClick={() => solicitProgram.mutate({ aid: a.id, mid })}>Solliciter</Button>
+                {(selectedMembers[a.id] ?? []).filter((mid) => solicitationCandidates.some((m) => m.id === mid)).map((mid) => {
+                  const key = `${a.id}::${mid}`;
+                  const allSlotIds = (serviceSlots.data ?? []).map((slot: any) => slot.id);
+                  const chosenSlotIds = selectedMemberSlots[key] ?? allSlotIds;
+                  const hasTravel = canonicalProgramFormat(programInfo.data?.format ?? "").startsWith("deplacement");
+                  const travelling = ((programInfo.data?.travel_member_ids ?? []) as string[]).includes(mid);
+                  const canDirectAssign = directCandidates.some((m) => m.id === mid);
+                  const canSolicit = solicitationCandidates.some((m) => m.id === mid);
+                  return <div key={mid} className="mt-2 rounded-md border bg-background px-3 py-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2"><b>{names.get(mid) ?? mid}</b>
+                      {hasTravel ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={travelling} disabled={setMemberTravel.isPending} onChange={(e) => setMemberTravel.mutate({ mid, travelling: e.target.checked })} />🚐 En déplacement</label> : null}
                     </div>
-                  </div>
-                ))}
+                    {allSlotIds.length ? <div className="mt-3 space-y-2 border-t pt-3">
+                      <div className="flex items-center justify-between gap-2"><b className="text-xs">Créneaux de {names.get(mid) ?? "ce membre"}</b>
+                        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={allSlotIds.length > 0 && allSlotIds.every((id) => chosenSlotIds.includes(id))} onChange={(e) => setSelectedMemberSlots((v) => ({ ...v, [key]: e.target.checked ? allSlotIds : [] }))} />Tous les créneaux</label>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">{(serviceSlots.data ?? []).map((slot: any) => <label key={slot.id} className="flex cursor-pointer items-start gap-2 rounded border p-2 text-xs">
+                        <input type="checkbox" checked={chosenSlotIds.includes(slot.id)} onChange={(e) => setSelectedMemberSlots((v) => ({ ...v, [key]: e.target.checked ? [...new Set([...(v[key] ?? allSlotIds), slot.id])] : (v[key] ?? allSlotIds).filter((id) => id !== slot.id) }))} />
+                        <span><b className="block">{slot.service_date ? new Date(`${slot.service_date}T12:00:00`).toLocaleDateString("fr-FR") : "Date à préciser"}</b>{slot.label || "Créneau"} · {slot.start_time}–{slot.end_time}</span>
+                      </label>)}</div>
+                    </div> : null}
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      {canDirectAssign ? <Button size="sm" disabled={assign.isPending || (!!allSlotIds.length && !chosenSlotIds.length)} onClick={() => assign.mutate({ aid: a.id, mid, slotIds: chosenSlotIds })}>Affecter directement</Button> : null}
+                      {canSolicit ? <Button size="sm" variant="outline" disabled={solicitProgram.isPending || (!!allSlotIds.length && !chosenSlotIds.length)} onClick={() => solicitProgram.mutate({ aid: a.id, mid, slotIds: chosenSlotIds })}>Solliciter</Button> : null}
+                    </div>
+                  </div>;
+                })}}
               </div>
             ) : null}
           </div>
