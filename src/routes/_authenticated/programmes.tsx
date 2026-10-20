@@ -62,9 +62,8 @@ function Programmes() {
     {filtered.length === 0 ? <EmptyState title="Aucun programme sur cette période" description="Changez la période ou les filtres pour afficher d’autres programmes." /> : <div className="space-y-2">
       {filtered.map(program => {
         const pp: any = program;
-        const totalRequired = program.assignments.reduce((n, a) => n + (a.required_count || 0), 0);
-        const totalAssigned = program.assignments.reduce((n, a) => n + a.memberIds.length, 0);
-        const missing = program.assignments.reduce((n, a) => n + Math.max(0, (a.required_count || 0) - a.memberIds.length), 0);
+        // Le résumé compact n'affiche volontairement aucun calcul de couverture :
+        // les besoins par créneau et les réponses aux sollicitations sont consultables dans la fiche détaillée.
         return <details key={program.id} className="group rounded-xl border bg-card shadow-sm open:shadow-md">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 hover:bg-muted/30 [&::-webkit-details-marker]:hidden">
             <div className="min-w-0">
@@ -80,7 +79,6 @@ function Programmes() {
                 <div className="flex flex-wrap gap-2">
                   <Badge className={statusClass[program.status] ?? ""}>{STATUS_LABEL[program.status] ?? program.status}</Badge>
                   {program.archived ? <Badge variant="outline">Archivé</Badge> : null}
-                  {totalRequired > 0 ? <Badge variant={missing ? "destructive" : "secondary"}>{missing ? `⚠️ ${missing} place${missing > 1 ? "s" : ""} à couvrir` : `✅ Équipe couverte ${totalAssigned}/${totalRequired}`}</Badge> : null}
                 </div>
                 {program.location ? <p className="text-sm text-muted-foreground">📍 {program.location}</p> : null}
                 {program.status === "postponed" ? <p className="text-sm font-semibold text-blue-700">Nouvelle date prévue : {pp.postponed_new_date_known && pp.postponed_new_start_date ? formatDate(pp.postponed_new_start_date) : "à renseigner ultérieurement"}</p> : null}
@@ -89,24 +87,20 @@ function Programmes() {
             </div>
 
             <div className="mt-4 space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Pôles / services affectés</p>
-              {program.assignments.length === 0 ? <p className="rounded-lg bg-muted/30 p-3 text-sm text-muted-foreground">Aucun pôle affecté.</p> : program.assignments.map(a => {
-                const required = a.required_count || 0, assigned = a.memberIds.length, remaining = Math.max(0, required - assigned);
-                return <details key={a.id} className="group/pole rounded-lg border bg-muted/20">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
-                    <div className="min-w-0"><b className="text-sm text-icc-violet">{poleName.get(a.pole_id) ?? "Pôle"}</b><p className="text-xs text-muted-foreground">{required ? `${assigned}/${required} affecté${assigned > 1 ? "s" : ""}${remaining ? ` · ${remaining} à couvrir` : " · besoin couvert"}` : `${assigned} affecté${assigned > 1 ? "s" : ""}`}</p></div>
-                    <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open/pole:rotate-180" />
-                  </summary>
-                  <div className="border-t px-3 py-3">
-                    {a.memberIds.length ? <div className="flex flex-wrap gap-2">{a.memberIds.map(mid => <span key={mid} className="rounded-lg bg-background px-3 py-2 text-sm font-semibold">{memberName.get(mid) ?? mid}</span>)}</div> : <p className="text-sm text-muted-foreground">Aucun membre encore affecté.</p>}
-                    {a.tasks ? <p className="mt-3 text-sm"><b>Service / tâches :</b> {a.tasks}</p> : null}
-                  </div>
-                </details>;
-              })}
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Pôles sollicités</p>
+              {program.assignments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucun pôle mobilisé.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {[...new Set(program.assignments.map((a) => poleName.get(a.pole_id) ?? "Pôle"))].map((name) => (
+                    <span key={name} className="rounded-md border bg-muted/30 px-2.5 py-1 text-sm font-medium">{name}</span>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Pour les créneaux, les réponses et l’état des besoins, ouvrez la fiche complète.</p>
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {missing > 0 && !program.archived ? <Button asChild size="sm"><Link to="/sollicitations">📣 Rechercher {missing} renfort{missing > 1 ? "s" : ""}</Link></Button> : null}
               {!program.archived ? <Button asChild size="sm" variant="outline"><Link to="/reporter-programme/$id" params={{ id: program.id }}>{program.status === "postponed" ? "Nouvelle date" : "Reporter"}</Link></Button> : null}
             </div>
           </div>
