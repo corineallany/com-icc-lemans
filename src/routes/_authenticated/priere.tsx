@@ -65,7 +65,9 @@ function PrayerPage() {
     enabled: !!member?.id,
     queryFn: async () => {
       const source = canManage ? "prayer_subjects" : "prayer_subjects_public";
-      const { data, error } = await db().from(source).select("*").order("created_at", { ascending: false });
+      let query = db().from(source).select("*");
+      if (canManage) query = query.is("archived_at", null).is("deleted_at", null);
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -178,14 +180,6 @@ function PrayerPage() {
     },
     onSuccess: async () => { await refresh(); toast.success("Feuille de présence enregistrée."); },
     onError: (e: any) => toast.error(e.message ?? "Impossible d’enregistrer les présences."),
-  });
-  const updateSubject = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await db().from("prayer_subjects").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: refresh,
-    onError: (e: any) => toast.error(e.message),
   });
   const archivePrayer = useMutation({
     mutationFn: async ({ kind, id, destination }: { kind: "subject" | "program"; id: string; destination: "archived" | "deleted" | "active" }) => {
