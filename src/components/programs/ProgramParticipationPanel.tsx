@@ -983,6 +983,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               </Button>
             ) : null}
           </div>
+          </div>
         </DialogContent>
       </Dialog>
 
