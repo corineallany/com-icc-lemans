@@ -326,7 +326,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     return (modes.data ?? []).filter((row: any) =>
       row.assignment_id === need.assignment_id &&
       ["direct", "proposal"].includes(row.assignment_mode) &&
-      row.process_status !== "covered"
+      !["covered", "withdrawn", "refused"].includes(row.process_status)
     ).length;
   };
   const replacementRowsForNeed = (need: any, slotId: string) =>
@@ -1130,16 +1130,22 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
 
       {assignments.map((a) => {
-        const required = a.required_count || 0;
         const rows = (modes.data ?? []).filter((x: any) => x.assignment_id === a.id);
         const confirmed = rows.filter(
           (x: any) =>
-            ["direct", "proposal"].includes(x.assignment_mode) && x.process_status !== "covered",
+            ["direct", "proposal"].includes(x.assignment_mode) &&
+            !["covered", "withdrawn", "refused"].includes(x.process_status),
         );
+        const poleNeeds = displayNeeds.filter((need: any) => need.assignment_id === a.id);
+        const required = poleNeeds.reduce((sum: number, need: any) => sum + Number(need.required_count ?? 0), 0);
+        const confirmedCount = poleNeeds.reduce((sum: number, need: any) => {
+          const count = coveredCountForNeedDisplay(need, need.service_slot_id);
+          return sum + Math.min(Number(need.required_count ?? 0), count);
+        }, 0);
         const solicited = rows.filter((x: any) => x.assignment_mode === "solicited");
         const props = (proposals.data ?? []).filter((p: any) => p.assignment_id === a.id);
         const pending = props.filter((p: any) => p.status === "pending");
-        const covered = required > 0 && confirmed.length >= required;
+        const covered = required > 0 && confirmedCount >= required;
         const mine = pending.find((p: any) => p.member_id === member?.id);
         const myPole = !!memberships.data?.has(a.pole_id);
         const confirmedIds = new Set(confirmed.map((x: any) => x.member_id));
@@ -1166,7 +1172,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               <b>{poleNames.get(a.pole_id) ?? "Pôle"}</b>
               {required > 0 ? (
                 <Badge variant={covered ? "secondary" : "destructive"}>
-                  {confirmed.length}/{required}
+                  {confirmedCount}/{required}
                 </Badge>
               ) : null}
             </div>
