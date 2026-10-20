@@ -383,10 +383,13 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         x.process_status !== "covered",
     );
 
+  // Seules les participations encore en cours doivent verrouiller le mode.
+  // Une proposition retirée/refusée ou une affectation clôturée reste dans l’historique,
+  // mais ne doit pas bloquer artificiellement une correction du mode de mobilisation.
   const participationModeLocked =
-    (proposals.data ?? []).length > 0 ||
-    (responses.data ?? []).length > 0 ||
-    (modes.data ?? []).length > 0;
+    (proposals.data ?? []).some((p: any) => ["pending", "assigned"].includes(p.status)) ||
+    (responses.data ?? []).some((r: any) => !["withdrawn", "cancelled", "canceled", "refused"].includes(String(r.status ?? "").toLowerCase())) ||
+    (modes.data ?? []).some((x: any) => !["covered", "withdrawn", "refused"].includes(x.process_status));
   const participationModeDataLoading =
     proposals.isLoading || responses.isLoading || modes.isLoading;
 
@@ -938,21 +941,22 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           {programConfig.data?.detailed_scheduling ? (
             <Button size="sm" variant="outline" onClick={() => {
               setDraftParticipationMode(programConfig.data.slot_selection_mode === "member" ? "member" : "organizer");
-              setModeEditorOpen((v) => !v);
+              setModeEditorOpen(true);
             }}>Mode de mobilisation</Button>
           ) : null}
-          <Button size="sm" variant="outline" onClick={() => setDeadlinesOpen((v) => !v)}>{deadlinesOpen ? "Masquer les délais" : "Délais de réponse"}</Button>
+          <Button size="sm" variant="outline" onClick={() => setDeadlinesOpen(true)}>Délais de réponse</Button>
         </div> : null}
       </div>
 
-      {isStaff && programConfig.data?.detailed_scheduling && modeEditorOpen ? (
-        <section className="space-y-3 rounded-lg border border-violet-200 bg-background p-3">
-          <div>
-            <h4 className="font-bold">Mode de mobilisation</h4>
-            <p className="text-xs text-muted-foreground">
-              Choisis le mode puis clique sur « Enregistrer ». Le mode est verrouillé dès qu’une proposition, une réponse ou une sollicitation/affectation a commencé, afin de préserver les créneaux et l’historique.
-            </p>
-          </div>
+      <Dialog open={isStaff && !!programConfig.data?.detailed_scheduling && modeEditorOpen} onOpenChange={setModeEditorOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Mode de mobilisation</DialogTitle>
+            <DialogDescription>
+              Choisis le mode puis clique sur « Enregistrer ». Le mode est verrouillé uniquement lorsqu’une participation est encore en cours. Les propositions retirées et les opérations clôturées ne bloquent pas le changement.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
           {participationModeLocked ? (
             <p className="rounded-md border bg-muted/40 p-2 text-sm">
               Le mode est verrouillé : le processus de participation a déjà commencé. Les choix ne peuvent plus être modifiés.
@@ -979,8 +983,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               </Button>
             ) : null}
           </div>
-        </section>
-      ) : null}
+        </DialogContent>
+      </Dialog>
 
       {isStaff ? (
         <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-red-200 bg-red-50/70 p-2.5 dark:border-red-900 dark:bg-red-950/20 sm:grid-cols-4">
@@ -1041,12 +1045,13 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
         />
       ) : null}
 
-      {isStaff && deadlinesOpen && programInfo.data ? (
-        <div className="space-y-3 rounded-lg border bg-background p-3">
-          <div>
-            <h4 className="font-bold">Délais de réponse</h4>
-            <p className="text-xs text-muted-foreground">Configure-les ici, sans règle automatique imposée à tous les programmes. Le délai peut être calculé avant le début du programme ou avant chaque créneau.</p>
-          </div>
+      <Dialog open={isStaff && deadlinesOpen && !!programInfo.data} onOpenChange={setDeadlinesOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Délais de réponse</DialogTitle>
+            <DialogDescription>Configure-les sans règle automatique imposée à tous les programmes. Le délai peut être calculé avant le début du programme ou avant chaque créneau.</DialogDescription>
+          </DialogHeader>
+          {programInfo.data ? <div className="space-y-3 rounded-lg border bg-background p-3">
           <div className="grid gap-2 sm:grid-cols-4">
             <label className="space-y-1 text-xs font-semibold">Nombre
               <Input type="number" min={1} step={1} placeholder="Ex. 48" value={globalDeadlineValue ?? (programInfo.data.response_deadline_offset_value == null ? "" : String(programInfo.data.response_deadline_offset_value))} onChange={(e) => setGlobalDeadlineValue(e.target.value)} />
@@ -1069,10 +1074,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               <Button size="sm" disabled={saveGlobalDeadline.isPending} onClick={() => saveGlobalDeadline.mutate()}>{saveGlobalDeadline.isPending ? "Enregistrement…" : "Enregistrer le délai général"}</Button>
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {isStaff && deadlinesOpen && (serviceSlots.data ?? []).length ? (
+          </div> : null}
+          {(serviceSlots.data ?? []).length ? (
         <div className="space-y-3 rounded-lg border bg-background p-3">
           <h4 className="font-bold">Délais personnalisés par créneau</h4>
           <p className="text-xs text-muted-foreground">Un créneau sans délai personnalisé hérite du délai général. Tu peux définir une exception par créneau ou rétablir l’héritage.</p>
@@ -1104,7 +1107,9 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
             </div>;
           })}
         </div>
-      ) : null}
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
 
 
