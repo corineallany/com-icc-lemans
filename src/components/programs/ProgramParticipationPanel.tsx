@@ -1006,7 +1006,6 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                 const replacementRows = replacementRowsForNeed(need, slot.id);
                 const replacementCount = Math.min(replacementRows.length, Math.max(0, Number(need.required_count) - slotCount));
                 const reinforcementCount = Math.max(0, Number(need.required_count) - slotCount - replacementCount);
-                const pendingCount = (modes.data ?? []).filter((m: any) => m.assignment_id === need.assignment_id && m.assignment_mode === "solicited" && m.process_status !== "covered").length;
                 return <div id={`assignment-${need.assignment_id}`} key={need.assignment_id} className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm scroll-mt-24">
                   <span className="flex flex-wrap items-center gap-2">
                     <b>{poleNames.get(assignment.pole_id) ?? "Pôle"}</b>
