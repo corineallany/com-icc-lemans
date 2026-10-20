@@ -496,6 +496,21 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
     onError: (e: any) => toast.error([e.message || "Impossible d’envoyer la sollicitation.", e.code ? `(${e.code})` : ""].filter(Boolean).join(" ")),
   });
 
+  const relaunchSolicitation = useMutation({
+    mutationFn: async ({ aid, mid }: { aid: string; mid: string }) => {
+      const { error } = await (supabase as any).rpc("solicit_program_member", {
+        p_assignment_id: aid,
+        p_member_id: mid,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refresh();
+      toast.success("Relance envoyée au membre");
+    },
+    onError: (e: any) => toast.error([e.message || "Impossible de relancer cette sollicitation.", e.code ? `(${e.code})` : ""].filter(Boolean).join(" ")),
+  });
+
   const setMemberTravel = useMutation({
     mutationFn: async ({ mid, travelling }: { mid: string; travelling: boolean }) => {
       const current = (programInfo.data?.travel_member_ids ?? []) as string[];
@@ -1234,6 +1249,16 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                         {response === "available" || response === "partial" ? (
                           <Button size="sm" onClick={() => confirmSolicitation.mutate(x.id)}>
                             Confirmer l’affectation
+                          </Button>
+                        ) : null}
+                        {!response || response === "pending" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={relaunchSolicitation.isPending}
+                            onClick={() => relaunchSolicitation.mutate({ aid: x.assignment_id, mid: x.member_id })}
+                          >
+                            Relancer
                           </Button>
                         ) : null}
                         <Button
