@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation,useQuery,useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus,Trash2,CheckCircle2,RotateCcw,ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell,EmptyState } from "@/components/AppShell";
@@ -22,6 +22,12 @@ const EMPTY:Draft={id:null,title:"",detail:"",due_date:"",priority:"normale",ass
 const selectClass="h-10 w-full rounded-md border border-input bg-background px-3 text-sm";
 function Taches(){
  const tasks=useQuery(tasksQuery),members=useQuery(membersQuery),poles=useQuery(polesQuery),programs=useQuery(programsQuery),qc=useQueryClient(),{member,isStaff}=useCurrentRole(),[draft,setDraft]=useState<Draft|null>(null),[period,setPeriod]=useState<DashboardPeriod>("month");
+ useEffect(()=>{
+  const taskId=new URLSearchParams(window.location.search).get("taskId");
+  if(!taskId||!tasks.data?.length)return;
+  const task=(tasks.data as any[]).find((item:any)=>item.id===taskId);
+  if(task)setDraft({id:task.id,title:task.title??"",detail:task.detail??"",due_date:task.due_date??"",priority:task.priority??"normale",assignee_member_id:task.assignee_member_id??"",pole_id:task.pole_id??"",program_id:task.program_id??""});
+ },[tasks.data]);
  const memberName=new Map((members.data?.members??[]).map(m=>[m.id,m.full_name])),poleName=new Map((poles.data??[]).map(p=>[p.id,p.name])),programMap=new Map((programs.data??[]).map(p=>[p.id,p]));const refresh=()=>qc.invalidateQueries({queryKey:["tasks"]});
  const save=useMutation({mutationFn:async(v:Draft)=>{const title=v.title.trim();if(!title)throw new Error("Le titre est obligatoire.");const payload={title,detail:v.detail.trim()||null,due_date:v.due_date||null,priority:v.priority,status:"todo",assignee_member_id:v.assignee_member_id||null,pole_id:v.pole_id||null,program_id:v.program_id||null};const q=v.id?supabase.from("tasks").update(payload).eq("id",v.id):supabase.from("tasks").insert(payload);const{error}=await q;if(error)throw error;await logAction({action:v.id?"tache_modifiee":"tache_creee",entity:"task",entityId:v.id??title,detail:title,actorName:member?.full_name})},onSuccess:()=>{toast.success("Tâche enregistrée");setDraft(null);refresh()},onError:(e:Error)=>toast.error(e.message)});
  const status=useMutation({mutationFn:async({task,done}:{task:Task;done:boolean})=>{const{error}=await supabase.from("tasks").update({status:done?"done":"todo"}).eq("id",task.id);if(error)throw error;await logAction({action:"tache_statut",entity:"task",entityId:task.id,detail:`${task.title} → ${done?"Terminée":"À faire"}`,actorName:member?.full_name})},onSuccess:refresh});
