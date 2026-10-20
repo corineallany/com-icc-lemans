@@ -62,9 +62,10 @@ function PrayerPage() {
 
   const subjects = useQuery({
     queryKey: ["prayer-subjects"],
-    enabled: canManage,
+    enabled: !!member?.id,
     queryFn: async () => {
-      const { data, error } = await db().from("prayer_subjects").select("*").order("created_at", { ascending: false });
+      const source = canManage ? "prayer_subjects" : "prayer_subjects_public";
+      const { data, error } = await db().from(source).select("*").is("archived_at", null).is("deleted_at", null).order("created_at", { ascending: false }).then((r:any) => r);
       if (error) throw error;
       return data ?? [];
     },
@@ -73,7 +74,7 @@ function PrayerPage() {
     queryKey: ["prayer-programs"],
     enabled: !!member?.id,
     queryFn: async () => {
-      const { data, error } = await db().from("prayer_programs").select("*").order("program_date", { ascending: false });
+      const { data, error } = await db().from("prayer_programs").select("*").is("archived_at", null).is("deleted_at", null).order("program_date", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -186,6 +187,16 @@ function PrayerPage() {
     onSuccess: refresh,
     onError: (e: any) => toast.error(e.message),
   });
+  const archivePrayer = useMutation({
+    mutationFn: async ({ kind, id, destination }: { kind: "subject" | "program"; id: string; destination: "archived" | "deleted" | "active" }) => {
+      if (!canManage) throw new Error("Seuls le responsable et l’admin technique peuvent archiver ces éléments.");
+      const rpc = kind === "subject" ? "prayer_archive_subject" : "prayer_archive_program";
+      const { error } = await db().rpc(rpc, { p_id: id, p_destination: destination });
+      if (error) throw error;
+    },
+    onSuccess: async () => { await refresh(); toast.success("Élément archivé."); },
+    onError: (e: any) => toast.error(e.message ?? "Impossible d’archiver cet élément."),
+  });
   const memberName = new Map((members.data ?? []).map((m: any) => [m.id, m.full_name]));
   const savedAttendance = attendance.data ?? [];
   const statusOf = (memberId: string) => attendanceDraft[memberId]?.status ?? savedAttendance.find((a: any) => a.member_id === memberId)?.attendance_status ?? "";
@@ -200,9 +211,9 @@ function PrayerPage() {
       </div>
       <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Button variant={prayerTab === "deposer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("deposer")}>Déposer un sujet</Button>
-        {canManage ? <Button variant={prayerTab === "creer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("creer")}>Créer un programme</Button> : null}
+        <Button variant={prayerTab === "creer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("creer")}>Programmes de prière</Button>
         <Button variant={prayerTab === "temps" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("temps")}>Temps de prière</Button>
-        {canManage ? <Button variant={prayerTab === "sujets" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("sujets")}>Sujets de prière enregistrés</Button> : null}
+        <Button variant={prayerTab === "sujets" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("sujets")}>Sujets de prière</Button>
       </div>
       {prayerTab === "deposer" ? <Card id="deposer-sujet" className="mb-6">
         <CardHeader><CardTitle>Corbeille à sujets de prière</CardTitle><p className="text-sm text-muted-foreground">Le sujet est transmis à la responsable et à l’administrateur technique. Tu peux le déposer sans indiquer ton identité.</p></CardHeader>
@@ -220,10 +231,10 @@ function PrayerPage() {
         </CardContent>
       </Card> : null}
 
-      {canManage ? <>
+      {true ? <>
         <section id="programmes-priere" className="space-y-5">
           {prayerTab === "creer" ? <div><h2 className="text-xl font-black text-icc-violet">Programmes de prière</h2><p className="text-sm text-muted-foreground">Ces rencontres sont indépendantes du planning opérationnel.</p></div> : null}
-          {prayerTab === "creer" ? <Card>
+          {canManage && prayerTab === "creer" ? <Card>
             <CardHeader><CardTitle>Créer un programme de prière</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <Field label="Thème / titre"><Input value={programTitle} onChange={e => setProgramTitle(e.target.value)} placeholder="Ex. : Prière pour la COM et les projets à venir" /></Field>
@@ -245,10 +256,10 @@ function PrayerPage() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             {prayerTab === "sujets" ? <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>Sujets de prière enregistrés ({(subjects.data ?? []).length})</CardTitle><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => exportExcel("corbeille-sujets-priere", [{title:"Sujets",rows:[["Date","Titre","Catégorie","Anonymat","Nom affiché","Description","Statut"],...(subjects.data ?? []).map((s:any)=>[new Date(s.created_at).toLocaleString("fr-FR"),s.title,CATEGORIES[s.category]??s.category,s.is_anonymous?"Oui":"Non",s.is_anonymous?"":s.display_name,s.description,s.status])]}])}>Exporter Excel</Button><Button size="sm" variant="outline" onClick={() => exportPdf("Corbeille à sujets de prière", [{heading:"Sujets déposés",entries:(subjects.data ?? []).map((s:any)=>[s.title,"Date : "+new Date(s.created_at).toLocaleString("fr-FR")+" | Catégorie : "+(CATEGORIES[s.category]??s.category)+" | Auteur : "+(s.is_anonymous?"Anonyme":s.display_name)+" | Statut : "+s.status+" | "+s.description])}])}>Exporter PDF</Button></div></div></CardHeader><CardContent className="space-y-3">
-              {subjects.isLoading ? <p className="text-sm text-muted-foreground">Chargement…</p> : (subjects.data ?? []).length ? (subjects.data ?? []).map((s:any) => <article key={s.id} className="rounded-xl border p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><Badge>{CATEGORIES[s.category] ?? "Autre"}</Badge><h3 className="mt-2 font-bold">{s.title}</h3><p className="text-xs text-muted-foreground">{s.is_anonymous ? "Anonyme" : s.display_name} · {new Date(s.created_at).toLocaleDateString("fr-FR")}</p></div><select aria-label="Statut du sujet" className="h-9 rounded-md border bg-background px-2 text-sm" value={s.status} onChange={e => updateSubject.mutate({id:s.id,status:e.target.value})}><option value="a_prier">À prier</option><option value="en_priere">En prière</option><option value="prie">Sujet prié</option></select></div><p className="mt-3 whitespace-pre-wrap text-sm">{s.description}</p></article>) : <EmptyState title="Aucun sujet pour le moment"/>}
+              {subjects.isLoading ? <p className="text-sm text-muted-foreground">Chargement…</p> : (subjects.data ?? []).length ? (subjects.data ?? []).map((s:any) => <article key={s.id} className="rounded-xl border p-3"><div className="flex flex-wrap items-start justify-between gap-2"><div><Badge>{CATEGORIES[s.category] ?? "Autre"}</Badge><h3 className="mt-2 font-bold">{s.title}</h3><p className="text-xs text-muted-foreground">{canManage ? (s.is_anonymous ? "Anonyme" : (s.display_name || "Identité non renseignée")) : "Sujet partagé par un membre"} · {new Date(s.created_at).toLocaleDateString("fr-FR")}</p></div>{canManage ? <Button size="sm" variant="outline" onClick={() => archivePrayer.mutate({kind:"subject",id:s.id,destination:"archived"})}>Archiver</Button> : null}</div><p className="mt-3 whitespace-pre-wrap text-sm">{s.description}</p></article>) : <EmptyState title="Aucun sujet pour le moment"/>}
             </CardContent></Card> : null}
             {prayerTab === "temps" ? <Card><CardHeader><CardTitle>Temps de prière enregistrés ({(programs.data ?? []).length})</CardTitle></CardHeader><CardContent className="space-y-2">
-              {(programs.data ?? []).length ? (programs.data ?? []).map((p:any) => <button key={p.id} onClick={() => {setSelectedProgram(p);setSelectedSlot(null);setAttendanceDraft({});}} className={"w-full rounded-lg border p-3 text-left "+(selectedProgram?.id===p.id?"border-icc-violet bg-icc-violet/5":"")}><b>{p.title}</b><span className="block text-sm text-muted-foreground">{new Date(p.program_date+"T12:00:00").toLocaleDateString("fr-FR")} · {p.status==="termine"?"Terminé":p.status==="annule"?"Annulé":"Planifié"}</span>{p.description ? <span className="mt-1 block text-sm">{p.description}</span> : null}</button>) : <EmptyState title="Aucun programme de prière créé"/>}
+              {(programs.data ?? []).length ? (programs.data ?? []).map((p:any) => <div key={p.id} className={"rounded-lg border p-3 "+(selectedProgram?.id===p.id?"border-icc-violet bg-icc-violet/5":"")}><button onClick={() => {setSelectedProgram(p);setSelectedSlot(null);setAttendanceDraft({});}} className="w-full text-left"><b>{p.title}</b><span className="block text-sm text-muted-foreground">{new Date(p.program_date+"T12:00:00").toLocaleDateString("fr-FR")} · {p.status==="termine"?"Terminé":p.status==="annule"?"Annulé":"Planifié"}</span>{p.description ? <span className="mt-1 block text-sm">{p.description}</span> : null}</button>{canManage ? <Button size="sm" variant="outline" className="mt-2" onClick={() => archivePrayer.mutate({kind:"program",id:p.id,destination:"archived"})}>Archiver ce temps de prière</Button> : null}</div>) : <EmptyState title="Aucun programme de prière créé"/>}
             </CardContent></Card> : null}
           </div>
           {prayerTab === "temps" && selectedProgram ? <Card><CardHeader><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle>Feuille de présence — {selectedProgram.title}</CardTitle><p className="text-sm text-muted-foreground">Choisissez un créneau, puis renseignez les présences.</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={async()=>{const {data:ss,error:se}=await db().from("prayer_program_slots").select("*").eq("program_id",selectedProgram.id).order("position");if(se){toast.error(se.message);return;}const ids=(ss??[]).map((x:any)=>x.id);const {data:aa,error:ae}=ids.length?await db().from("prayer_program_attendance").select("*").in("slot_id",ids):{data:[],error:null};if(ae){toast.error(ae.message);return;}exportExcel("rapport-priere-"+selectedProgram.program_date,[{title:"Programme",rows:[["Thème","Date","Description"],[selectedProgram.title,selectedProgram.program_date,selectedProgram.description??""]]},{title:"Présences",rows:[["Date","Début","Fin","Conducteurs","Membre","Statut","Motif d’absence","Observation"],...(ss??[]).flatMap((sl:any)=>(aa??[]).filter((a:any)=>a.slot_id===sl.id).map((a:any)=>[sl.slot_date,sl.start_time,sl.end_time,(sl.conductor_member_ids??[]).map((id:string)=>memberName.get(id)??id).join(", "),memberName.get(a.member_id)??a.member_id,a.attendance_status,a.absence_reason??"",a.observation??""]))]}]);}}>Exporter Excel</Button><Button size="sm" variant="outline" onClick={async()=>{const {data:ss,error:se}=await db().from("prayer_program_slots").select("*").eq("program_id",selectedProgram.id).order("position");if(se){toast.error(se.message);return;}const ids=(ss??[]).map((x:any)=>x.id);const {data:aa,error:ae}=ids.length?await db().from("prayer_program_attendance").select("*").in("slot_id",ids):{data:[],error:null};if(ae){toast.error(ae.message);return;}exportPdf("Rapport du programme de prière : "+selectedProgram.title,[{heading:"Informations du programme",entries:[["Thème",selectedProgram.title],["Date de référence",selectedProgram.program_date],["Description",selectedProgram.description??""]]},...(ss??[]).map((sl:any)=>({heading:"Créneau du "+sl.slot_date+" ("+sl.start_time+"–"+sl.end_time+")",entries:[["Conducteurs",(sl.conductor_member_ids??[]).map((id:string)=>memberName.get(id)??id).join(", ")||"Non renseignés"],...(aa??[]).filter((a:any)=>a.slot_id===sl.id).map((a:any)=>[memberName.get(a.member_id)??a.member_id,(a.attendance_status==="present"?"Présent(e)":a.attendance_status==="absent"?"Absent(e)":"Présence partielle")+" | Motif : "+(a.absence_reason??"—")+" | Observation : "+(a.observation??"—")])] }))]);}}>Exporter PDF</Button></div></div></CardHeader><CardContent className="space-y-4">
