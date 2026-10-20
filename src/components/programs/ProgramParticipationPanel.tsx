@@ -468,27 +468,20 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
   const removeAssignment = useMutation({
     mutationFn: async (id: string) => {
-      // No confirmation dialog for authorized staff. The reason is optional.
+      // Le retrait autorisé est immédiat, sans confirmation. Le motif est facultatif
+      // et enregistré dans la même transaction que le retrait et sa trace d'audit.
       const reason = window.prompt("Motif du retrait (facultatif) :", "")?.trim() ?? "";
       const { error } = await (supabase as any).rpc("remove_direct_program_assignment", {
         p_assignment_member_id: id,
+        p_reason: reason || null,
       });
       if (error) throw error;
-      if (reason) {
-        const { error: reasonError } = await (supabase as any)
-          .from("program_assignment_members")
-          .update({ process_closed_reason: `Affectation retirée — Motif : ${reason}` })
-          .eq("id", id);
-        if (reasonError) throw reasonError;
-      }
     },
     onSuccess: () => {
       refresh();
-      toast.success("Affectation retirée");
+      toast.success("Affectation retirée et historique enregistré");
     },
-    onError: (e: any) => {
-      if (e.message !== "ANNULÉ") toast.error(e.message);
-    },
+    onError: (e: any) => toast.error(e.message || "Impossible de retirer cette affectation."),
   });
 
   const saveParticipationMode = useMutation({
