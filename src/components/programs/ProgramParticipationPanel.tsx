@@ -1345,7 +1345,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                       {canSolicit ? <Button size="sm" variant="outline" disabled={solicitProgram.isPending || (!!allSlotIds.length && !chosenSlotIds.length)} onClick={() => solicitProgram.mutate({ aid: a.id, mid, slotIds: chosenSlotIds })}>Solliciter</Button> : null}
                     </div>
                   </div>;
-                })}}
+                })}
               </div>
             ) : null}
           </div>
