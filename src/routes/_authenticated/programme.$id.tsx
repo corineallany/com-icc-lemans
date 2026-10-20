@@ -645,7 +645,7 @@ function ProgramSheet() {
           </p>
           <Card>
             <CardHeader>
-              <CardTitle>Équipe affectée ({actualAssignments.length})</CardTitle>
+              <CardTitle>Équipe affectée ({actualTeamMembers.length})</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Le pôle de service et les créneaux associés sont indiqués pour chaque personne. La mention « En déplacement » apparaît uniquement si un déplacement est prévu et que la personne y participe.
               </p>
