@@ -225,7 +225,6 @@ function MemberPage() {
         training_done: isFormation ? false : leavingFormation ? false : draft.training_done,
         is_icc: draft.is_icc,
         is_ejp: draft.is_ejp,
-        inactive_note: draft.inactive_note.trim() || null,
       };
 
       const w: any = supabase.from("members");
