@@ -284,6 +284,7 @@ function MemberPage() {
         <div>
           <h2 className="text-xl font-black text-icc-violet">{row.full_name}</h2>
           <div className="mt-2 flex flex-wrap gap-1">
+            {row.status ? <Badge variant={row.status === "active" ? "default" : "secondary"}>{row.status === "active" ? "Actif" : row.status === "inactive" ? "Inactif" : "Archivé"}</Badge> : null}
             {refs.length ? <><Badge variant="outline">🏅 Référent</Badge><b className="text-sm">{refs.map((p) => p.name).join(" · ")}</b></> : null}
             {row.is_icc ? <Badge>ICC</Badge> : null}
             {row.is_ejp ? <Badge>EJP</Badge> : null}
