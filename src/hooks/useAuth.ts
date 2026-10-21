@@ -21,17 +21,30 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let authEventReceived = false;
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+      authEventReceived = true;
       setSession(next);
       setUser(next?.user ?? null);
       setLoading(false);
     });
 
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (authEventReceived) return;
+        if (error) throw error;
+        setSession(data.session);
+        setUser(data.session?.user ?? null);
+      })
+      .catch((error: unknown) => {
+        console.error("[Auth] Impossible de restaurer la session locale.", error);
+        if (!authEventReceived) {
+          setSession(null);
+          setUser(null);
+        }
+      })
+      .finally(() => setLoading(false));
 
     return () => sub.subscription.unsubscribe();
   }, []);
