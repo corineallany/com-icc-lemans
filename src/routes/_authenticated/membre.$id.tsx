@@ -250,12 +250,27 @@ function MemberPage() {
       }
 
       await logAction({ action: isNew ? "membre_cree" : "membre_modifie", entity: "member", entityId: memberId, detail: full_name, actorName: actor?.full_name });
-      return memberId;
+      return { memberId, payload, desiredPoles, isNew };
     },
-    onSuccess: async (mid) => {
+    onSuccess: async ({ memberId: mid, payload: savedPayload, desiredPoles, isNew: created }) => {
+      // Reflect the confirmed server write immediately; the background refetch
+      // then reconciles this optimistic display with the canonical database row.
+      qc.setQueryData(["members"], (old: any) => {
+        if (!old) return old;
+        const savedMember = { ...(old.members ?? []).find((m: any) => m.id === mid), ...savedPayload, id: mid, status: created ? "active" : (old.members ?? []).find((m: any) => m.id === mid)?.status ?? "active" };
+        const nextMembers = created
+          ? [...(old.members ?? []), savedMember]
+          : (old.members ?? []).map((m: any) => m.id === mid ? savedMember : m);
+        nextMembers.sort((a: any, b: any) => String(a.full_name ?? "").localeCompare(String(b.full_name ?? ""), "fr"));
+        const nextLinks = [
+          ...(old.links ?? []).filter((l: any) => l.member_id !== mid),
+          ...desiredPoles.map((p: any) => ({ member_id: mid, pole_id: p.pole_id, is_referent: p.is_referent })),
+        ];
+        return { ...old, members: nextMembers, links: nextLinks };
+      });
       toast.success("Fiche membre enregistrée");
-      await qc.invalidateQueries({ queryKey: ["members"] });
-      if (isNew) navigate({ to: "/membre/$id", params: { id: mid } });
+      void qc.invalidateQueries({ queryKey: ["members"] });
+      if (created) navigate({ to: "/membre/$id", params: { id: mid } });
       else setEditing(false);
     },
     onError: (e: Error) => toast.error("Enregistrement incomplet", { description: e.message }),
