@@ -56,7 +56,6 @@ const TABLE_QUERY_KEYS: Record<string, QueryKey[]> = {
   team_life_poll_options: [["ve-options"]],
   team_life_poll_votes: [["ve-votes"]],
   team_life_participations: [["ve-parts"]],
-  team_life_event_history: [["ve-history"]],
   prayer_subjects: [["prayer-subjects"], ["archives"]],
   prayer_programs: [["prayer-programs"], ["archives"]],
   prayer_program_slots: [["prayer-program-slots"]],
