@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -212,12 +212,7 @@ function PrayerPage() {
   const observationOf = (memberId: string) => attendanceDraft[memberId]?.observation ?? savedAttendance.find((a: any) => a.member_id === memberId)?.observation ?? "";
   const patchAttendance = (memberId: string, key: string, value: string) => setAttendanceDraft(prev => ({ ...prev, [memberId]: { status: prev[memberId]?.status ?? statusOf(memberId), reason: prev[memberId]?.reason ?? reasonOf(memberId), observation: prev[memberId]?.observation ?? observationOf(memberId), [key]: value } }));
   return (
-    <AppShell title="Vie d’équipe" subtitle="Deux espaces distincts : COM’Frat et Prière.">
-      <div className="mb-5 grid grid-cols-3 gap-2">
-        <Link to="/vie-equipe" className="flex min-h-11 items-center justify-center rounded-lg border px-2 py-2 text-center text-sm font-semibold transition-colors hover:border-icc-violet">COM’Frat</Link>
-        <Link to="/priere" aria-current="page" className="flex min-h-11 items-center justify-center rounded-lg border border-icc-violet bg-icc-violet px-2 py-2 text-center text-sm font-semibold text-white">Prière</Link>
-        <Link to="/caisse-fraternelle" className="flex min-h-11 items-center justify-center rounded-lg border px-2 py-2 text-center text-sm font-semibold transition-colors hover:border-icc-violet">Caisse</Link>
-      </div>
+    <AppShell title="Prière" subtitle="Sujets, programmes et temps de prière de la COM.">
       <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Button variant={prayerTab === "deposer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("deposer")}>Déposer un sujet</Button>
         <Button variant={prayerTab === "creer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("creer")}>Programmes de prière</Button>
