@@ -148,8 +148,8 @@ function FinanceSettings() {
 
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><UserRoundCog className="size-5" />Gestionnaires de caisse</CardTitle>
-        <CardDescription>Attribue la gestion complète de la caisse à une ou plusieurs personnes sans changer leur rôle de base. Un Équipier ou un Référent peut donc devenir Gestionnaire de caisse.</CardDescription>
+        <CardTitle className="flex items-center gap-2"><UserRoundCog className="size-5" />Trésorier·ère(s) / gestionnaires de caisse</CardTitle>
+        <CardDescription>C’est ici que la Direction désigne le ou les trésoriers de la Caisse fraternelle. La personne reçoit les droits de gestion financière sans changer son rôle de base ; un Équipier ou un Référent peut donc être désigné.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-2 md:grid-cols-[1fr_auto]">
@@ -157,9 +157,9 @@ function FinanceSettings() {
             <option value="">Choisir un membre</option>
             {active.filter((m: any) => !managerIds.has(m.id)).map((m: any) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select>
-          <Button onClick={() => addManager.mutate()} disabled={!managerMemberId || addManager.isPending}>+ Ajouter comme gestionnaire</Button>
+          <Button onClick={() => addManager.mutate()} disabled={!managerMemberId || addManager.isPending}>+ Désigner comme trésorier·ère</Button>
         </div>
-        {(managers.data ?? []).filter((m) => m.active).length ? <div className="space-y-2">{(managers.data ?? []).filter((m) => m.active).map((m) => <div key={m.member_id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b>{memberName(m.member_id)}</b><p className="text-xs text-muted-foreground">Gestion complète : détails, confirmations, entrées, dépenses, justificatifs, corrections et annulations.</p></div><Button size="sm" variant="outline" onClick={() => removeManager.mutate(m.member_id)}>Retirer la gestion</Button></div>)}</div> : <p className="text-sm text-muted-foreground">Aucun gestionnaire supplémentaire n’est désigné pour le moment. La Direction et l’Admin technique conservent leurs accès prévus.</p>}
+        {(managers.data ?? []).filter((m) => m.active).length ? <div className="space-y-2">{(managers.data ?? []).filter((m) => m.active).map((m) => <div key={m.member_id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"><div><b>{memberName(m.member_id)}</b><p className="text-xs text-muted-foreground">Gestion complète : détails, confirmations, entrées, dépenses, justificatifs, corrections et annulations.</p></div><Button size="sm" variant="outline" onClick={() => removeManager.mutate(m.member_id)}>Retirer la gestion</Button></div>)}</div> : <p className="text-sm text-muted-foreground">Aucun trésorier·ère supplémentaire n’est désigné pour le moment. La Direction et l’Admin technique conservent leurs accès prévus.</p>}
       </CardContent>
     </Card>
 
