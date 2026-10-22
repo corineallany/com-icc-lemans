@@ -277,7 +277,7 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
 
   const names = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members]);
   const selectableMembers = useMemo(() => members.filter((m) => !m.deleted).slice().sort((a,b) => { const rank=(m:any)=>m.status==="active"&&!m.archived?0:m.status==="inactive"?2:3; return rank(a)-rank(b)||String(a.full_name).localeCompare(String(b.full_name),"fr"); }), [members]);
-  const availabilityForMembers = useQuery({queryKey:["staffing-member-availability",programId],queryFn:async()=>{const {data,error}=await (supabase as any).from("member_availability").select("member_id,starts_at,ends_at,status").neq("status","refused");if(error)throw error;return data??[];}});
+  const availabilityForMembers = useQuery({queryKey:["staffing-member-availability",programId],queryFn:async()=>{const {data,error}=await (supabase as any).from("member_availability").select("member_id,starts_at,ends_at,status").eq("status","validated");if(error)throw error;return data??[];}});
   const isUnavailableDuringProgram = (mid:string) => {const p:any=programInfo.data;if(!p)return false;const start=p.start_date?new Date(`${p.start_date}T${p.start_time||"00:00"}:00`):null;const end=p.end_date?new Date(`${p.end_date}T${p.end_time||"23:59"}:00`):new Date(`${p.start_date}T${p.end_time||"23:59"}:00`);return !!start&&!!end&&(availabilityForMembers.data??[]).some((av:any)=>av.member_id===mid&&new Date(av.starts_at)<end&&start<new Date(av.ends_at));};
   const poleNames = useMemo(() => new Map(poles.map((p) => [p.id, p.name])), [poles]);
   const responseMap = useMemo(
