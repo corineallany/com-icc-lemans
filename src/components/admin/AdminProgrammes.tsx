@@ -585,7 +585,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
         };
         const isSingleOvernight = Boolean(v.start_date && v.end_date && v.end_date === nextDate(v.start_date) && v.start_time && v.end_time && v.end_time <= v.start_time);
-        const logicalServiceDate = (slot: ServiceSlotDraft) =>
+        const logicalServiceDate = (slot: (typeof v.serviceSlots)[number]) =>
           isSingleOvernight && slot.service_date === v.end_date && slot.start_time < v.start_time
             ? v.start_date
             : slot.service_date;
