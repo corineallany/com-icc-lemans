@@ -1005,7 +1005,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                     </div>
                     {showAllComMembers ? (
                       <div className="mt-3 space-y-2">
-                        {allMembers.filter((m: any) => m.status === "active" && !m.archived && !m.deleted).map((m: any) => {
+                        {allMembers.filter((m: any) => !m.deleted).slice().sort((a:any,b:any)=>{const rank=(m:any)=>m.status!=="active"?m.status==="inactive"?2:3:unavailable(m.id)?1:0;return rank(a)-rank(b)||String(a.full_name).localeCompare(String(b.full_name),"fr")}).map((m: any) => {
                           const memberPoleIds = [...new Set(links.filter((link: any) => link.member_id === m.id && activePoles.some((p) => p.id === link.pole_id)).map((link: any) => link.pole_id))];
                           const selection = Object.entries(draft.poles).find(([, value]) => value.memberIds.includes(m.id));
                           const chosenPoleId = globalPoleChoice[m.id] ?? selection?.[0] ?? memberPoleIds[0] ?? "";
@@ -1019,7 +1019,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                               <div className="flex flex-wrap items-center gap-2">
                                 <Checkbox
                                   checked={checked}
-                                  disabled={!memberPoleIds.length}
+                                  disabled={!memberPoleIds.length || m.status!=="active" || !!m.archived}
                                   onCheckedChange={(value) => {
                                     const on = value === true;
                                     const nextPoles: Record<string, PoleDraft> = { ...draft.poles };
@@ -1062,7 +1062,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                     setDraft({ ...draft, poles: nextPoles });
                                   }}
                                 />
-                                <span className="min-w-[140px] flex-1 text-sm font-medium">{m.full_name}</span>
+                                <span className={`min-w-[140px] flex-1 text-sm font-medium ${m.status==="inactive"?"text-muted-foreground opacity-60":m.status==="archived"||m.archived?"text-muted-foreground opacity-40":""}`}>{unavailable(m.id)?<span className="mr-2 font-semibold text-red-600">INDISPONIBLE</span>:null}{m.full_name}{m.status==="inactive"?" · Inactif":m.status==="archived"||m.archived?" · Archivé":""}</span>
                                 <span className="text-xs text-muted-foreground">
                                   {memberPoleIds.map((id) => activePoles.find((p) => p.id === id)?.name).filter(Boolean).join(" · ") || "Aucun pôle"}
                                 </span>
@@ -1319,7 +1319,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                                         });
                                       }}
                                     />
-                                    <span>{m.full_name}</span>
+                                    <span className={inactive?m.status==="inactive"?"text-muted-foreground opacity-60":"text-muted-foreground opacity-40":""}>{u?<span className="mr-2 font-semibold text-red-600">INDISPONIBLE</span>:null}{m.full_name}{m.status==="inactive"?" · Inactif":m.status==="archived"||m.archived?" · Archivé":""}</span>
                                   </label>
                                   {checked ? (
                                     <div className="w-full space-y-2 pl-7">
