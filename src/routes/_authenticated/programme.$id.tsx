@@ -505,7 +505,7 @@ function ProgramSheet() {
                       {day.note ? <p className="mt-1 text-sm">{day.note}</p> : null}
                       {daySlots.length ? <div className="mt-2 space-y-2">{daySlots.map((slot: any) => (
                         <div key={slot.id} className="rounded-md bg-muted/60 p-2 text-sm">
-                          <b>{slot.label || "Créneau"}</b> · {slot.start_time || "—"} → {slot.end_time || "—"}
+                          <b>{slot.label || "Créneau"}</b> · {slot.start_time || "—"} → {slot.end_time || "—"}{slot.start_time && slot.end_time && (String(slot.end_time).slice(0,5) <= String(slot.start_time).slice(0,5) || (day.start_time && String(slot.start_time).slice(0,5) < String(day.start_time).slice(0,5))) ? <span className="text-muted-foreground"> · après minuit / lendemain</span> : null}
                           {slot.required_count ? <span> · Besoin : {slot.required_count} personne(s)</span> : null}
                         </div>
                       ))}</div> : null}
