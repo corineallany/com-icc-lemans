@@ -1162,8 +1162,8 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
                   {activePoles.map((pole) => {
                     const x = draft.poles[pole.id] ?? { selected: false, tasks: "", memberIds: [], requiredBySlot: {}, memberModes: {}, memberSlotIds: {} };
                     const pm = allMembers.filter((m) =>
-                      links.some((l) => l.pole_id === pole.id && l.member_id === m.id),
-                    );
+                      !m.deleted && links.some((l) => l.pole_id === pole.id && l.member_id === m.id),
+                    ).slice().sort((a:any,b:any)=>{const rank=(m:any)=>m.status!=="active"?m.status==="inactive"?2:3:unavailable(m.id)?1:0;return rank(a)-rank(b)||String(a.full_name).localeCompare(String(b.full_name),"fr")});
                     const travelFormat = canonicalProgramFormat(draft.format).startsWith("deplacement");
                     return (
                       <div key={pole.id} className="rounded-xl border p-3">
