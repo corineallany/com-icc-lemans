@@ -299,7 +299,7 @@ function Sollicitations() {
     const blocked = (availability.data ?? []).some(
       (a: any) =>
         a.member_id === memberId &&
-        a.status !== "refused" &&
+        a.status === "validated" &&
         overlap(w.start, w.end, a.starts_at, a.ends_at),
     );
     if (blocked) return { level: "danger", label: "Indisponible sur ce créneau" };
