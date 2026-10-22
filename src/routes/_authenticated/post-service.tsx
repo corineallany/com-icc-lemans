@@ -194,14 +194,34 @@ function PostService() {
       .map((d: any) => ({ ...d, slots: (serviceSlots.data ?? []).filter((s: any) => s.program_day_id === d.id) }))
       .sort((a: any, b: any) => String(a.service_date).localeCompare(String(b.service_date)));
     if (rows.length) return rows;
-    if (program.start_date) return [{
-      id: "legacy-" + program.id,
-      program_id: program.id,
-      service_date: program.start_date,
-      start_time: program.start_time ?? null,
-      end_time: program.end_time ?? null,
-      slots: (serviceSlots.data ?? []).filter((s: any) => s.program_id === program.id),
-    }];
+    if (program.start_date) {
+      const endDate = program.end_date ?? program.start_date;
+      const startTime = String(program.start_time ?? "00:00").slice(0, 5);
+      const endTime = String(program.end_time ?? "23:59").slice(0, 5);
+      const start = new Date(`${program.start_date}T12:00:00`);
+      const end = new Date(`${endDate}T12:00:00`);
+      const nextDate = new Date(start);
+      nextDate.setDate(nextDate.getDate() + 1);
+      const nextIso = [nextDate.getFullYear(), String(nextDate.getMonth() + 1).padStart(2, "0"), String(nextDate.getDate()).padStart(2, "0")].join("-");
+      const isSingleOvernight = endDate === nextIso && endTime <= startTime;
+      const dates: string[] = [];
+      if (isSingleOvernight) dates.push(program.start_date);
+      else {
+        const cursor = new Date(start);
+        while (cursor <= end && dates.length < 90) {
+          dates.push([cursor.getFullYear(), String(cursor.getMonth() + 1).padStart(2, "0"), String(cursor.getDate()).padStart(2, "0")].join("-"));
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+      return dates.map((service_date, index) => ({
+        id: `legacy-${program.id}-${service_date}`,
+        program_id: program.id,
+        service_date,
+        start_time: index === 0 ? (program.start_time ?? null) : "00:00",
+        end_time: isSingleOvernight ? endTime : service_date === endDate ? endTime : "23:59",
+        slots: index === 0 ? (serviceSlots.data ?? []).filter((s: any) => s.program_id === program.id) : [],
+      }));
+    }
     return [];
   };
 
