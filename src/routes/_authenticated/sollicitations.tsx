@@ -1246,7 +1246,7 @@ function Sollicitations() {
                     <Checks
                       items={listedMembers.map((m: any) => [
                         m.id,
-                        `${availabilityState(m.id, form.program_id).label==="Indisponible"?"INDISPONIBLE · ":""}${m.full_name}${m.status==="inactive"?" · Inactif":m.status==="archived"||m.archived?" · Archivé":""}`,
+                        `${availabilityState(m.id, form.program_id).label.startsWith("Indisponible")?"INDISPONIBLE · ":""}${m.full_name}${m.status==="inactive"?" · Inactif":m.status==="archived"||m.archived?" · Archivé":""}`,
                         m.status!=="active"||!!m.archived?"disabled":"",
                         m.status==="inactive"?"inactive":m.status==="archived"||m.archived?"archived":"",
                       ])}
