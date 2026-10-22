@@ -247,7 +247,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
     }
     const serviceSlots: ServiceSlotDraft[] = (slotRes.data ?? []).map((s: any) => ({
       key: s.id,
-      service_date: dayMap.get(s.program_day_id) ?? p.start_date ?? "",
+      service_date: s.actual_start_date ?? dayMap.get(s.program_day_id) ?? p.start_date ?? "",
       label: s.label ?? "",
       start_time: s.start_time ?? "",
       end_time: s.end_time ?? "",
@@ -610,6 +610,8 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           label: null,
           start_time: s.start_time,
           end_time: s.end_time,
+          actual_start_date: s.service_date,
+          actual_end_date: (() => { const d = new Date(`${s.service_date}T12:00:00`); if (s.end_time <= s.start_time) d.setDate(d.getDate() + 1); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-"); })(),
           required_count: 1,
           response_deadline_offset_value: s.deadline_override && s.response_deadline_offset_value !== "" ? Number(s.response_deadline_offset_value) : null,
           response_deadline_offset_unit: s.deadline_override && s.response_deadline_offset_value !== "" ? s.response_deadline_offset_unit : null,
