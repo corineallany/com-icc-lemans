@@ -86,9 +86,15 @@ type Contribution = {
   to_direction: boolean;
   created_at: string;
   updated_at: string;
+  service_date: string;
+  service_slot_ids: string[];
+  assignment_ids: string[];
 };
 type ContributionDraft = {
   program_id: string;
+  service_date: string;
+  service_slot_ids: string[];
+  assignment_ids: string[];
   pole_id: string;
   rating: number;
   went_well: string;
@@ -134,6 +140,8 @@ function PostService() {
   const { member, userId } = useCurrentRole();
   const [globalDraft, setGlobalDraft] = useState<GlobalDraft | null>(null);
   const [contributionDraft, setContributionDraft] = useState<ContributionDraft | null>(null);
+  const serviceDays = useQuery({ queryKey: ["post-service-program-days"], queryFn: async () => { const { data, error } = await db().from("program_days").select("id,program_id,service_date,start_time,end_time,note").order("service_date"); if (error) throw new Error(error.message); return data ?? []; } });
+  const serviceSlots = useQuery({ queryKey: ["post-service-service-slots"], queryFn: async () => { const { data, error } = await db().from("program_service_slots").select("id,program_id,program_day_id,assignment_id,label,start_time,end_time,position").order("position"); if (error) throw new Error(error.message); return data ?? []; } });
   useEffect(()=>{const id=new URLSearchParams(window.location.search).get("programId");if(!id)return;const node=document.getElementById(`post-service-${id}`);if(node)node.scrollIntoView({behavior:"smooth",block:"center"})},[programs.data]);
 
   const memberName = (id: string) => membersData.data?.members.find((m) => m.id === id)?.full_name ?? "Membre";
@@ -175,7 +183,14 @@ function PostService() {
   const byProgram = new Map<string, ProgramDebrief>();
   for (const d of debriefs.data ?? []) if (!byProgram.has(d.program_id)) byProgram.set(d.program_id, d);
   const contributionByProgram = (programId: string) => (contributions.data ?? []).filter((c) => c.program_id === programId);
-  const mineFor = (programId: string) => contributionByProgram(programId).find((c) => c.author_member_id === member?.id);
+  const mineFor = (programId: string, serviceDate: string) => contributionByProgram(programId).find((c) => c.author_member_id === member?.id && c.service_date === serviceDate);
+  const daysForProgram = (program: any) => {
+    const rows = (serviceDays.data ?? []).filter((d: any) => d.program_id === program.id).map((d: any) => ({ ...d, slots: (serviceSlots.data ?? []).filter((s: any) => s.program_day_id === d.id) }));
+    const passed = rows.filter((d: any) => String(d.service_date) <= today).sort((a: any,b: any) => String(a.service_date).localeCompare(String(b.service_date)));
+    if (passed.length) return passed;
+    if (!rows.length && (program.start_date ?? "9999") <= today) return [{ id: "legacy-" + program.id, program_id: program.id, service_date: program.start_date, slots: (serviceSlots.data ?? []).filter((s: any) => s.program_id === program.id) }];
+    return [];
+  };
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["program-debriefs"] });
@@ -188,9 +203,12 @@ function PostService() {
   const saveContribution = useMutation({
     mutationFn: async (value: ContributionDraft) => {
       if (!member?.id || !userId) throw new Error("Profil membre introuvable.");
-      const existing = mineFor(value.program_id);
+      const existing = mineFor(value.program_id, value.service_date);
       const payload = {
         program_id: value.program_id,
+        service_date: value.service_date,
+        service_slot_ids: value.service_slot_ids,
+        assignment_ids: value.assignment_ids,
         author_member_id: member.id,
         pole_id: value.pole_id || null,
         rating: value.rating || null,
@@ -294,11 +312,14 @@ function PostService() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  function openContribution(program: any) {
-    const current = mineFor(program.id);
+  function openContribution(program: any, serviceDate: string) {
+    const current = mineFor(program.id, serviceDate);
     const assignedPole = (program.assignments ?? []).find((a: any) => (a.memberIds ?? []).includes(member?.id))?.pole_id ?? "";
     setContributionDraft({
       program_id: program.id,
+      service_date: serviceDate,
+      service_slot_ids: current?.service_slot_ids ?? [],
+      assignment_ids: current?.assignment_ids ?? [],
       pole_id: current?.pole_id ?? assignedPole,
       rating: current?.rating ?? 0,
       went_well: current?.went_well ?? "",
@@ -382,7 +403,7 @@ function PostService() {
     setGlobalDraft({ ...globalDraft, incidents: globalDraft.incidents.map((i) => i.type === type ? { ...i, ...patch } : i) });
   }
 
-  const loading = programs.isLoading || debriefs.isLoading || contributions.isLoading || access.isLoading;
+  const loading = programs.isLoading || debriefs.isLoading || contributions.isLoading || access.isLoading || serviceDays.isLoading || serviceSlots.isLoading;
 
   return <AppShell title="Post-service" subtitle="Un retour d’expérience collectif : chaque personne affectée peut contribuer, puis une synthèse unique est consolidée">
     {loading ? <div className="space-y-3">{[0,1,2].map((i)=><Skeleton key={i} className="h-32 rounded-2xl" />)}</div> : past.length === 0 ? <EmptyState title="Aucun programme passé" description="Le post-service s'ouvre après la date du programme." /> : <div className="space-y-4">
@@ -397,7 +418,7 @@ function PostService() {
         const actual = rows.filter((r) => presentLike.has(r.presence)).length;
         const incidents = debrief ? decodeIncidents(debrief.incident_type, debrief.incident_detail) : [];
         const closed = (debrief as any)?.status === "closed";
-        const myContribution = mineFor(program.id);
+        const myContribution = mineFor(program.id, program.start_date ?? "");
         return <Card id={`post-service-${program.id}`} key={program.id} className="scroll-mt-24">
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -413,10 +434,10 @@ function PostService() {
             <div className="grid gap-2 sm:grid-cols-3"><div className="rounded-lg bg-muted p-2 text-sm"><b>Prévu</b><p>{planned} personne(s)</p></div><div className="rounded-lg bg-muted p-2 text-sm"><b>Réel</b><p>{rows.length ? `${actual} présent(s) / ${rows.length} relevé(s)` : "À renseigner dans la synthèse"}</p></div><div className="rounded-lg bg-muted p-2 text-sm"><b>Contributions</b><p>{contribs.length} retour(s) terrain</p></div></div>
 
             <div className="flex flex-wrap gap-2">
-              {rights.contribute ? <Button size="sm" variant={myContribution?"outline":"default"} disabled={closed} onClick={()=>openContribution(program)}><MessageSquareText className="size-4"/>{myContribution?"Modifier mon retour":"Ajouter mon retour"}</Button> : null}
               {rights.finalize ? <Button size="sm" variant="outline" onClick={()=>openGlobal(program.id,debrief)}><Pencil className="size-4"/>{debrief?"Ouvrir la synthèse":"Créer la synthèse"}</Button> : null}
             </div>
 
+            <div className="space-y-3"><p className="text-sm font-bold text-icc-violet">Retours par journée de service</p>{daysForProgram(program).map((day: any) => { const dayContribs = contribs.filter((c) => c.service_date === day.service_date); const own = mineFor(program.id, day.service_date); return <div key={day.id} className="rounded-xl border p-3 space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><div><b>{formatDate(day.service_date)}</b><p className="text-xs text-muted-foreground">{day.slots?.length ? day.slots.length + " créneau(x) prévu(s)" : "Journée de service"}</p></div>{rights.contribute ? <Button size="sm" variant={own?"outline":"default"} disabled={closed} onClick={()=>openContribution(program,day.service_date)}><MessageSquareText className="size-4"/>{own?"Modifier mon retour":"Ajouter mon retour"}</Button> : null}</div>{day.slots?.length ? <div className="flex flex-wrap gap-1">{day.slots.map((s:any)=><Badge key={s.id} variant="outline">{s.label || "Créneau"} {s.start_time || s.end_time ? (s.start_time || "?") + "–" + (s.end_time || "?") : ""}</Badge>)}</div> : <p className="text-xs text-muted-foreground">Aucun créneau détaillé enregistré pour cette journée.</p>}{dayContribs.length ? <div className="grid gap-2 md:grid-cols-2">{dayContribs.map((c)=><div key={c.id} className="rounded-xl border p-3 text-sm"><b>{memberName(c.author_member_id)}</b>{c.service_slot_ids?.length ? <p className="text-xs text-muted-foreground">Créneaux sélectionnés : {c.service_slot_ids.map((sid)=>day.slots?.find((s:any)=>s.id===sid)?.label || day.slots?.find((s:any)=>s.id===sid)?.start_time || "Créneau").join(", ")}</p> : null}{c.assignment_ids?.length ? <p className="text-xs text-muted-foreground">Postes sélectionnés : {(program.assignments??[]).filter((a:any)=>c.assignment_ids.includes(a.id)).map((a:any)=>a.tasks || poleName(a.pole_id)).join(", ")}</p> : null}{c.went_well ? <p className="mt-1"><b>Bien :</b> {c.went_well}</p> : null}{c.difficulties ? <p><b>Difficultés :</b> {c.difficulties}</p> : null}{c.to_improve ? <p><b>À améliorer :</b> {c.to_improve}</p> : null}{c.needs ? <p><b>Besoins :</b> {c.needs}</p> : null}</div>)}</div> : <p className="text-xs text-muted-foreground">Aucun retour pour cette journée.</p>}</div>})}</div>
             {contribs.length ? <div className="space-y-2"><p className="text-sm font-bold text-icc-violet">Retours de l’équipe</p><div className="grid gap-2 md:grid-cols-2">{contribs.map((c)=><div key={c.id} className="rounded-xl border p-3 text-sm"><div className="flex items-center justify-between gap-2"><b>{memberName(c.author_member_id)}</b><div className="flex gap-1"><Badge variant="outline">{poleName(c.pole_id)}</Badge>{c.rating?<Badge variant="secondary">{c.rating}/5</Badge>:null}</div></div>{c.went_well?<p className="mt-2"><b>👍 Bien :</b> {c.went_well}</p>:null}{c.difficulties?<p><b>Difficultés :</b> {c.difficulties}</p>:null}{c.to_improve?<p><b>À améliorer :</b> {c.to_improve}</p>:null}{c.needs?<p><b>Besoins :</b> {c.needs}</p>:null}{c.incident_note?<p className="mt-1 rounded-lg bg-destructive/5 p-2 text-destructive"><b>Incident / alerte :</b> {c.incident_note}</p>:null}{c.proposed_action?<p className="text-xs text-muted-foreground">Action proposée : {c.proposed_action}</p>:null}{c.to_direction?<Badge className="mt-2">À remonter à la Direction</Badge>:null}</div>)}</div></div> : <p className="text-sm text-muted-foreground">Aucun retour individuel pour l'instant.</p>}
 
             {debrief ? <div className="rounded-xl border bg-muted/20 p-3 text-sm"><div className="mb-2 flex items-center justify-between"><b className="text-icc-violet">Synthèse globale</b>{debrief.rating?<Badge variant="secondary">{debrief.rating}/5</Badge>:null}</div><p className="text-xs text-muted-foreground">{COMPLETION_LABEL[debrief.completion] ?? debrief.completion}{debrief.actual_start || debrief.actual_end ? ` · Horaires réels ${debrief.actual_start ?? "?"} → ${debrief.actual_end ?? "?"}` : ""}</p>{debrief.summary?<p className="mt-1">{debrief.summary}</p>:null}{debrief.went_well?<p><b>A bien fonctionné :</b> {debrief.went_well}</p>:null}{debrief.to_improve?<p><b>À améliorer :</b> {debrief.to_improve}</p>:null}{debrief.difficulties?<p><b>Difficultés :</b> {debrief.difficulties}</p>:null}{debrief.needs?<p><b>Besoins :</b> {debrief.needs}</p>:null}{incidents.length?<p><b>Incidents consolidés :</b> {incidents.length}</p>:null}{debrief.to_direction?<Badge className="mt-2">Remonté à la Direction</Badge>:null}</div> : null}
@@ -430,6 +451,9 @@ function PostService() {
         <DialogHeader><DialogTitle>Mon retour post-service</DialogTitle></DialogHeader>
         {contributionDraft ? <div className="space-y-4">
           <p className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">Ton retour est personnel et identifié. Il contribue au bilan collectif sans remplacer les retours des autres personnes affectées.</p>
+          <div className="rounded-lg bg-muted/40 p-3 text-sm"><b>Journée :</b> {formatDate(contributionDraft.service_date)}. Sélectionne plusieurs créneaux et postes si nécessaire ; tu enregistres un seul retour pour la journée.</div>
+          <section className="space-y-2"><p className="text-sm font-semibold">Créneaux effectués</p>{(serviceSlots.data ?? []).filter((s:any)=>s.program_id===contributionDraft.program_id && (serviceDays.data ?? []).some((d:any)=>d.id===s.program_day_id && d.service_date===contributionDraft.service_date)).map((s:any)=><label key={s.id} className="flex items-center gap-2 text-sm"><Checkbox checked={contributionDraft.service_slot_ids.includes(s.id)} onCheckedChange={(v)=>setContributionDraft({...contributionDraft,service_slot_ids:v===true?[...new Set([...contributionDraft.service_slot_ids,s.id])]:contributionDraft.service_slot_ids.filter((id)=>id!==s.id)})}/>{s.label || "Créneau"} {s.start_time || s.end_time ? (s.start_time || "?") + "–" + (s.end_time || "?") : ""}</label>)}</section>
+          <section className="space-y-2"><p className="text-sm font-semibold">Postes / affectations effectués</p>{(past.find(p=>p.id===contributionDraft.program_id)?.assignments ?? []).map((a:any)=><label key={a.id} className="flex items-center gap-2 text-sm"><Checkbox checked={contributionDraft.assignment_ids.includes(a.id)} onCheckedChange={(v)=>setContributionDraft({...contributionDraft,assignment_ids:v===true?[...new Set([...contributionDraft.assignment_ids,a.id])]:contributionDraft.assignment_ids.filter((id)=>id!==a.id)})}/>{poleName(a.pole_id)} — {a.tasks || "Poste"}</label>)}</section>
           <Field label="Pôle concerné"><Select value={contributionDraft.pole_id||"transversal"} onValueChange={(v)=>setContributionDraft({...contributionDraft,pole_id:v==="transversal"?"":v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="transversal">Transversal / général</SelectItem>{Array.from(new Set((past.find(p=>p.id===contributionDraft.program_id)?.assignments??[]).map((a:any)=>a.pole_id))).map((pid:any)=><SelectItem key={pid} value={pid}>{poleName(pid)}</SelectItem>)}</SelectContent></Select></Field>
           <Field label="Appréciation personnelle /5"><Input type="number" min="1" max="5" value={contributionDraft.rating||""} onChange={(e)=>setContributionDraft({...contributionDraft,rating:Number(e.target.value)||0})}/></Field>
           <Field label="Ce qui a bien fonctionné"><Textarea value={contributionDraft.went_well} onChange={(e)=>setContributionDraft({...contributionDraft,went_well:e.target.value})}/></Field>
