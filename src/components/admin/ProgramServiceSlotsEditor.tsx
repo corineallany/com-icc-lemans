@@ -184,6 +184,7 @@ export function ProgramServiceSlotsEditor(props: Props) {
                     />
                   </label>
                 </div>
+                {slot.start_time && slot.end_time && slot.start_time !== slot.end_time && slot.end_time <= slot.start_time ? <p className="text-xs text-muted-foreground">Ce créneau se termine le lendemain ({slot.end_time}).</p> : null}
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
