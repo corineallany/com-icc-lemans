@@ -206,7 +206,8 @@ function Sollicitations() {
   const [answerSlots, setAnswerSlots] = useState<Record<string, string[]>>({});
 
   const allMembers = members.data?.members ?? [];
-  const activeMembers = allMembers.filter((m: any) => m.status === "active" && !m.archived);
+  const activeMembers = allMembers.filter((m: any) => m.status === "active" && !m.archived && !m.deleted);
+  const listedMembers = allMembers.filter((m:any)=>!m.deleted).slice().sort((a:any,b:any)=>{const rank=(m:any)=>m.status==="active"&&!m.archived?0:m.status==="inactive"?2:3;return rank(a)-rank(b)||String(a.full_name).localeCompare(String(b.full_name),"fr")});
   const links = members.data?.links ?? [];
   const activePoles = (poles.data ?? []).filter((p) => !p.archived);
   const allActivePrograms = (programs.data ?? []).filter((p) => !p.archived && !p.deleted);
@@ -1064,7 +1065,7 @@ function Sollicitations() {
                   value={form.requester_member_id || "none"}
                   set={(v) => setForm({ ...form, requester_member_id: v === "none" ? "" : v })}
                   all="Choisir"
-                  items={activeMembers.map((m: any) => [m.id, m.full_name])}
+                  items={listedMembers.map((m: any) => [m.id, m.full_name, m.status!=="active"||!!m.archived?"disabled":"", m.status==="inactive"?"inactive":m.status==="archived"||m.archived?"archived":""])}
                 />
               </Field>
               <Field label="Programme lié *">
@@ -1243,9 +1244,11 @@ function Sollicitations() {
                   </div>
                   {t.type === "member" ? (
                     <Checks
-                      items={activeMembers.map((m: any) => [
+                      items={listedMembers.map((m: any) => [
                         m.id,
-                        `${m.full_name} · ${availabilityState(m.id, form.program_id).label}`,
+                        `${availabilityState(m.id, form.program_id).label==="Indisponible"?"INDISPONIBLE · ":""}${m.full_name}${m.status==="inactive"?" · Inactif":m.status==="archived"||m.archived?" · Archivé":""}`,
+                        m.status!=="active"||!!m.archived?"disabled":"",
+                        m.status==="inactive"?"inactive":m.status==="archived"||m.archived?"archived":"",
                       ])}
                       values={t.ids}
                       set={(ids) =>
