@@ -374,10 +374,10 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       if (
         v.detailed_scheduling &&
         v.serviceSlots.some(
-          (s) => !s.service_date || !s.start_time || !s.end_time || s.start_time >= s.end_time,
+          (s) => !s.service_date || !s.start_time || !s.end_time || s.start_time === s.end_time,
         )
       )
-        throw new Error("Chaque créneau doit avoir un jour et des horaires valides.");
+        throw new Error("Chaque créneau doit avoir une date, une heure de début et une heure de fin différentes. Un créneau peut se terminer après minuit.");
       if (v.detailed_scheduling) {
         for (const [poleId, poleDraft] of Object.entries(v.poles).filter(([, x]) => x.selected)) {
           const solicitedMembers = poleDraft.memberIds.filter((memberId) => (poleDraft.memberModes?.[memberId] ?? "direct") === "solicited");
@@ -577,15 +577,27 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
       await db.from("program_service_slots").delete().eq("program_id", id);
       await db.from("program_days").delete().eq("program_id", id);
       if (v.detailed_scheduling) {
-        const dates = [...new Set(v.serviceSlots.map((s) => s.service_date))];
+        // A slot after midnight can still belong to the logical service day that began the previous evening.
+        // For a single overnight program, normalize early-morning slots on end_date back to start_date.
+        const nextDate = (date: string) => {
+          const d = new Date(`${date}T12:00:00`);
+          d.setDate(d.getDate() + 1);
+          return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+        };
+        const isSingleOvernight = Boolean(v.start_date && v.end_date && v.end_date === nextDate(v.start_date) && v.start_time && v.end_time && v.end_time <= v.start_time);
+        const logicalServiceDate = (slot: ServiceSlotDraft) =>
+          isSingleOvernight && slot.service_date === v.end_date && slot.start_time < v.start_time
+            ? v.start_date
+            : slot.service_date;
+        const dates = [...new Set(v.serviceSlots.map(logicalServiceDate))];
         const dayIns = await db
           .from("program_days")
           .insert(
             dates.map((service_date) => ({
               program_id: id,
               service_date,
-              start_time: null,
-              end_time: null,
+              start_time: service_date === v.start_date ? (v.start_time || null) : (v.serviceSlots.filter((s) => logicalServiceDate(s) === service_date).map((s) => s.start_time).sort()[0] ?? null),
+              end_time: service_date === v.start_date && isSingleOvernight ? (v.end_time || null) : (v.serviceSlots.filter((s) => logicalServiceDate(s) === service_date).map((s) => s.end_time).sort().slice(-1)[0] ?? null),
             })),
           )
           .select("id,service_date");
@@ -593,7 +605,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
         const dayByDate = new Map((dayIns.data ?? []).map((d: any) => [d.service_date, d.id]));
         const slotRows = v.serviceSlots.map((s, position) => ({
           program_id: id,
-          program_day_id: dayByDate.get(s.service_date),
+          program_day_id: dayByDate.get(logicalServiceDate(s)),
           assignment_id: null,
           label: null,
           start_time: s.start_time,
@@ -657,7 +669,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
               return am
                 ? [{
                     assignment_member_id: am.id,
-                    program_day_id: dayByDate.get(slot.service_date),
+                    program_day_id: dayByDate.get(logicalServiceDate(slot)),
                     service_slot_id: savedSlot.id,
                     start_time: slot.start_time,
                     end_time: slot.end_time,
