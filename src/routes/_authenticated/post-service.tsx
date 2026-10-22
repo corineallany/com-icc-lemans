@@ -106,6 +106,8 @@ type ContributionDraft = {
   to_direction: boolean;
 };
 type AccessRow = { contribute: boolean; finalize: boolean };
+type DayDebrief = { id: string; program_id: string; service_date: string; summary: string | null; went_well: string | null; difficulties: string | null; to_improve: string | null; needs: string | null; rating: number | null; status: string }; 
+type DayDebriefDraft = { program_id: string; service_date: string; summary: string; went_well: string; difficulties: string; to_improve: string; needs: string; rating: number; status: string; id: string | null };
 
 const INCIDENT_JSON_PREFIX = "__ICC_INCIDENTS_V2__";
 const IMPACT_LABEL: Record<string, string> = { mineur: "Mineur", modere: "Modéré", important: "Important", critique: "Critique" };
@@ -142,6 +144,8 @@ function PostService() {
   const [contributionDraft, setContributionDraft] = useState<ContributionDraft | null>(null);
   const serviceDays = useQuery({ queryKey: ["post-service-program-days"], queryFn: async () => { const { data, error } = await db().from("program_days").select("id,program_id,service_date,start_time,end_time,note").order("service_date"); if (error) throw new Error(error.message); return data ?? []; } });
   const serviceSlots = useQuery({ queryKey: ["post-service-service-slots"], queryFn: async () => { const { data, error } = await db().from("program_service_slots").select("id,program_id,program_day_id,assignment_id,label,start_time,end_time,position").order("position"); if (error) throw new Error(error.message); return data ?? []; } });
+  const dayDebriefs = useQuery({ queryKey: ["program-day-debriefs"], queryFn: async () => { const { data, error } = await db().from("program_day_debriefs").select("*").order("service_date", { ascending: false }); if (error) throw new Error(error.message); return (data ?? []) as DayDebrief[]; } });
+  const [dayDebriefDraft, setDayDebriefDraft] = useState<DayDebriefDraft | null>(null);
   useEffect(()=>{const id=new URLSearchParams(window.location.search).get("programId");if(!id)return;const node=document.getElementById(`post-service-${id}`);if(node)node.scrollIntoView({behavior:"smooth",block:"center"})},[programs.data]);
 
   const memberName = (id: string) => membersData.data?.members.find((m) => m.id === id)?.full_name ?? "Membre";
@@ -193,6 +197,7 @@ function PostService() {
   };
 
   function refresh() {
+    qc.invalidateQueries({ queryKey: ["program-day-debriefs"] });
     qc.invalidateQueries({ queryKey: ["program-debriefs"] });
     qc.invalidateQueries({ queryKey: ["program-debrief-contributions"] });
     qc.invalidateQueries({ queryKey: ["program-attendance"] });
@@ -235,6 +240,17 @@ function PostService() {
       });
     },
     onSuccess: () => { toast.success("Ton retour a été enregistré"); setContributionDraft(null); refresh(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveDayDebrief = useMutation({
+    mutationFn: async (value: DayDebriefDraft) => {
+      if (!value.id && !userId) throw new Error("Compte utilisateur introuvable.");
+      const payload = { program_id: value.program_id, service_date: value.service_date, summary: value.summary.trim() || null, went_well: value.went_well.trim() || null, difficulties: value.difficulties.trim() || null, to_improve: value.to_improve.trim() || null, needs: value.needs.trim() || null, rating: value.rating || null, status: value.status, author_member_id: member?.id ?? null, created_by: userId ?? null, updated_at: new Date().toISOString() };
+      const { error } = await db().from("program_day_debriefs").upsert(payload, { onConflict: "program_id,service_date" });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => { toast.success("Synthèse de la journée enregistrée"); setDayDebriefDraft(null); refresh(); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -403,7 +419,7 @@ function PostService() {
     setGlobalDraft({ ...globalDraft, incidents: globalDraft.incidents.map((i) => i.type === type ? { ...i, ...patch } : i) });
   }
 
-  const loading = programs.isLoading || debriefs.isLoading || contributions.isLoading || access.isLoading || serviceDays.isLoading || serviceSlots.isLoading;
+  const loading = programs.isLoading || debriefs.isLoading || contributions.isLoading || access.isLoading || serviceDays.isLoading || serviceSlots.isLoading || dayDebriefs.isLoading;
 
   return <AppShell title="Post-service" subtitle="Un retour d’expérience collectif : chaque personne affectée peut contribuer, puis une synthèse unique est consolidée">
     {loading ? <div className="space-y-3">{[0,1,2].map((i)=><Skeleton key={i} className="h-32 rounded-2xl" />)}</div> : past.length === 0 ? <EmptyState title="Aucun programme passé" description="Le post-service s'ouvre après la date du programme." /> : <div className="space-y-4">
@@ -436,12 +452,20 @@ function PostService() {
               {rights.finalize ? <Button size="sm" variant="outline" onClick={()=>openGlobal(program.id,debrief)}><Pencil className="size-4"/>{debrief?"Ouvrir la synthèse":"Créer la synthèse"}</Button> : null}
             </div>
 
-            <div className="space-y-3"><p className="text-sm font-bold text-icc-violet">Retours par journée de service</p>{daysForProgram(program).map((day: any) => { const dayContribs = contribs.filter((c) => c.service_date === day.service_date); const own = mineFor(program.id, day.service_date); return <div key={day.id} className="rounded-xl border p-3 space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><div><b>{formatDate(day.service_date)}</b><p className="text-xs text-muted-foreground">{day.slots?.length ? day.slots.length + " créneau(x) prévu(s)" : "Journée de service"}</p></div>{rights.contribute ? <Button size="sm" variant={own?"outline":"default"} disabled={closed} onClick={()=>openContribution(program,day.service_date)}><MessageSquareText className="size-4"/>{own?"Modifier mon retour":"Ajouter mon retour"}</Button> : null}</div>{day.slots?.length ? <div className="flex flex-wrap gap-1">{day.slots.map((s:any)=><Badge key={s.id} variant="outline">{s.label || "Créneau"} {s.start_time || s.end_time ? (s.start_time || "?") + "–" + (s.end_time || "?") : ""}</Badge>)}</div> : <p className="text-xs text-muted-foreground">Aucun créneau détaillé enregistré pour cette journée.</p>}{dayContribs.length ? <div className="grid gap-2 md:grid-cols-2">{dayContribs.map((c)=><div key={c.id} className="rounded-xl border p-3 text-sm"><b>{memberName(c.author_member_id)}</b>{c.service_slot_ids?.length ? <p className="text-xs text-muted-foreground">Créneaux sélectionnés : {c.service_slot_ids.map((sid)=>day.slots?.find((s:any)=>s.id===sid)?.label || day.slots?.find((s:any)=>s.id===sid)?.start_time || "Créneau").join(", ")}</p> : null}{c.assignment_ids?.length ? <p className="text-xs text-muted-foreground">Postes sélectionnés : {(program.assignments??[]).filter((a:any)=>c.assignment_ids.includes(a.id)).map((a:any)=>a.tasks || poleName(a.pole_id)).join(", ")}</p> : null}{c.went_well ? <p className="mt-1"><b>Bien :</b> {c.went_well}</p> : null}{c.difficulties ? <p><b>Difficultés :</b> {c.difficulties}</p> : null}{c.to_improve ? <p><b>À améliorer :</b> {c.to_improve}</p> : null}{c.needs ? <p><b>Besoins :</b> {c.needs}</p> : null}</div>)}</div> : <p className="text-xs text-muted-foreground">Aucun retour pour cette journée.</p>}</div>})}</div>
+            <div className="space-y-3"><p className="text-sm font-bold text-icc-violet">Retours par journée de service</p>{daysForProgram(program).map((day: any) => { const dayContribs = contribs.filter((c) => c.service_date === day.service_date); const own = mineFor(program.id, day.service_date); const dayDebrief = (dayDebriefs.data ?? []).find((d) => d.program_id === program.id && d.service_date === day.service_date); return <div key={day.id} className="rounded-xl border p-3 space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><div><b>{formatDate(day.service_date)}</b><p className="text-xs text-muted-foreground">{day.slots?.length ? day.slots.length + " créneau(x) prévu(s)" : "Journée de service"}</p></div>{rights.contribute ? <Button size="sm" variant={own?"outline":"default"} disabled={closed} onClick={()=>openContribution(program,day.service_date)}><MessageSquareText className="size-4"/>{own?"Modifier mon retour":"Ajouter mon retour"}</Button> : null}</div>{day.slots?.length ? <div className="flex flex-wrap gap-1">{day.slots.map((s:any)=><Badge key={s.id} variant="outline">{s.label || "Créneau"} {s.start_time || s.end_time ? (s.start_time || "?") + "–" + (s.end_time || "?") : ""}</Badge>)}</div> : <p className="text-xs text-muted-foreground">Aucun créneau détaillé enregistré pour cette journée.</p>}{dayContribs.length ? <div className="grid gap-2 md:grid-cols-2">{dayContribs.map((c)=><div key={c.id} className="rounded-xl border p-3 text-sm"><b>{memberName(c.author_member_id)}</b>{c.service_slot_ids?.length ? <p className="text-xs text-muted-foreground">Créneaux sélectionnés : {c.service_slot_ids.map((sid)=>day.slots?.find((s:any)=>s.id===sid)?.label || day.slots?.find((s:any)=>s.id===sid)?.start_time || "Créneau").join(", ")}</p> : null}{c.assignment_ids?.length ? <p className="text-xs text-muted-foreground">Postes sélectionnés : {(program.assignments??[]).filter((a:any)=>c.assignment_ids.includes(a.id)).map((a:any)=>a.tasks || poleName(a.pole_id)).join(", ")}</p> : null}{c.went_well ? <p className="mt-1"><b>Bien :</b> {c.went_well}</p> : null}{c.difficulties ? <p><b>Difficultés :</b> {c.difficulties}</p> : null}{c.to_improve ? <p><b>À améliorer :</b> {c.to_improve}</p> : null}{c.needs ? <p><b>Besoins :</b> {c.needs}</p> : null}</div>)}</div> : <p className="text-xs text-muted-foreground">Aucun retour pour cette journée.</p>}{rights.finalize ? <Button size="sm" variant="outline" onClick={() => setDayDebriefDraft({id: dayDebrief?.id ?? null,program_id:program.id,service_date:day.service_date,summary:dayDebrief?.summary ?? "",went_well:dayDebrief?.went_well ?? "",difficulties:dayDebrief?.difficulties ?? "",to_improve:dayDebrief?.to_improve ?? "",needs:dayDebrief?.needs ?? "",rating:dayDebrief?.rating ?? 0,status:dayDebrief?.status ?? "draft"})}><Pencil className="size-4"/>{dayDebrief ? "Modifier la synthèse du jour" : "Créer la synthèse du jour"}</Button> : null}{dayDebrief ? <div className="rounded-lg bg-muted/30 p-3 text-sm"><b>Synthèse du jour</b>{dayDebrief.rating ? <Badge className="ml-2">{dayDebrief.rating}/5</Badge> : null}{dayDebrief.summary ? <p className="mt-1">{dayDebrief.summary}</p> : null}{dayDebrief.went_well ? <p><b>Bien :</b> {dayDebrief.went_well}</p> : null}{dayDebrief.difficulties ? <p><b>Difficultés :</b> {dayDebrief.difficulties}</p> : null}{dayDebrief.to_improve ? <p><b>À améliorer :</b> {dayDebrief.to_improve}</p> : null}{dayDebrief.needs ? <p><b>Besoins :</b> {dayDebrief.needs}</p> : null}</div> : null}</div>})}</div>
             {debrief ? <div className="rounded-xl border bg-muted/20 p-3 text-sm"><div className="mb-2 flex items-center justify-between"><b className="text-icc-violet">Synthèse globale</b>{debrief.rating?<Badge variant="secondary">{debrief.rating}/5</Badge>:null}</div><p className="text-xs text-muted-foreground">{COMPLETION_LABEL[debrief.completion] ?? debrief.completion}{debrief.actual_start || debrief.actual_end ? ` · Horaires réels ${debrief.actual_start ?? "?"} → ${debrief.actual_end ?? "?"}` : ""}</p>{debrief.summary?<p className="mt-1">{debrief.summary}</p>:null}{debrief.went_well?<p><b>A bien fonctionné :</b> {debrief.went_well}</p>:null}{debrief.to_improve?<p><b>À améliorer :</b> {debrief.to_improve}</p>:null}{debrief.difficulties?<p><b>Difficultés :</b> {debrief.difficulties}</p>:null}{debrief.needs?<p><b>Besoins :</b> {debrief.needs}</p>:null}{incidents.length?<p><b>Incidents consolidés :</b> {incidents.length}</p>:null}{debrief.to_direction?<Badge className="mt-2">Remonté à la Direction</Badge>:null}</div> : null}
           </CardContent>
         </Card>
       })}
     </div>}
+
+    <Dialog open={!!dayDebriefDraft} onOpenChange={(o)=>!o&&setDayDebriefDraft(null)}>
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader><DialogTitle>Synthèse du jour — {dayDebriefDraft ? formatDate(dayDebriefDraft.service_date) : ""}</DialogTitle></DialogHeader>
+        {dayDebriefDraft ? <div className="space-y-3"><Field label="Synthèse de la journée"><Textarea value={dayDebriefDraft.summary} onChange={(e)=>setDayDebriefDraft({...dayDebriefDraft,summary:e.target.value})}/></Field><div className="grid gap-3 sm:grid-cols-2"><Field label="Ce qui a bien fonctionné"><Textarea value={dayDebriefDraft.went_well} onChange={(e)=>setDayDebriefDraft({...dayDebriefDraft,went_well:e.target.value})}/></Field><Field label="Difficultés"><Textarea value={dayDebriefDraft.difficulties} onChange={(e)=>setDayDebriefDraft({...dayDebriefDraft,difficulties:e.target.value})}/></Field><Field label="À améliorer"><Textarea value={dayDebriefDraft.to_improve} onChange={(e)=>setDayDebriefDraft({...dayDebriefDraft,to_improve:e.target.value})}/></Field><Field label="Besoins / suites"><Textarea value={dayDebriefDraft.needs} onChange={(e)=>setDayDebriefDraft({...dayDebriefDraft,needs:e.target.value})}/></Field></div><Field label="Appréciation de la journée /5"><Input type="number" min="1" max="5" value={dayDebriefDraft.rating || ""} onChange={(e)=>setDayDebriefDraft({...dayDebriefDraft,rating:Number(e.target.value)||0})}/></Field></div> : null}
+        <DialogFooter><Button variant="ghost" onClick={()=>setDayDebriefDraft(null)}>Annuler</Button><Button disabled={saveDayDebrief.isPending} onClick={()=>dayDebriefDraft&&saveDayDebrief.mutate(dayDebriefDraft)}>Enregistrer la synthèse du jour</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={!!contributionDraft} onOpenChange={(o)=>!o&&setContributionDraft(null)}>
       <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto">
