@@ -276,7 +276,9 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
   });
 
   const names = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members]);
-  const activeMembers = useMemo(() => members.filter((m) => m.status === "active" && !m.deleted && !m.archived), [members]);
+  const selectableMembers = useMemo(() => members.filter((m) => !m.deleted).slice().sort((a,b) => { const rank=(m:any)=>m.status==="active"&&!m.archived?0:m.status==="inactive"?2:3; return rank(a)-rank(b)||String(a.full_name).localeCompare(String(b.full_name),"fr"); }), [members]);
+  const availabilityForMembers = useQuery({queryKey:["staffing-member-availability",programId],queryFn:async()=>{const {data,error}=await (supabase as any).from("member_availability").select("member_id,starts_at,ends_at,status").neq("status","refused");if(error)throw error;return data??[];}});
+  const isUnavailableDuringProgram = (mid:string) => {const p:any=programInfo.data;if(!p)return false;const start=p.start_date?new Date(`${p.start_date}T${p.start_time||"00:00"}:00`):null;const end=p.end_date?new Date(`${p.end_date}T${p.end_time||"23:59"}:00`):new Date(`${p.start_date}T${p.end_time||"23:59"}:00`);return !!start&&!!end&&(availabilityForMembers.data??[]).some((av:any)=>av.member_id===mid&&new Date(av.starts_at)<end&&start<new Date(av.ends_at));};
   const poleNames = useMemo(() => new Map(poles.map((p) => [p.id, p.name])), [poles]);
   const responseMap = useMemo(
     () => new Map((responses.data ?? []).map((r: any) => [r.member_id, r.status])),
@@ -1257,14 +1259,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
           rows.filter((x: any) => x.process_status !== "covered").map((x: any) => x.member_id),
         );
 
-        const directCandidates = members.filter(
-          (m) =>
-            m.status === "active" &&
-            !m.deleted &&
-            !m.archived &&
-            !confirmedIds.has(m.id) &&
-            !activeRowIds.has(m.id) &&
-            membershipKeys.has(`${a.pole_id}::${m.id}`),
+        const directCandidates = selectableMembers.filter(
+          (m:any) => !confirmedIds.has(m.id) && !activeRowIds.has(m.id) && membershipKeys.has(`${a.pole_id}::${m.id}`),
         );
 
         // Affectation et sollicitation se font uniquement parmi les membres du pôle concerné.
@@ -1447,8 +1443,8 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
                       const travelling = ((programInfo.data?.travel_member_ids ?? []) as string[]).includes(m.id);
                       return <div key={m.id} className="rounded-md">
                         <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm hover:bg-muted/50">
-                          <input type="checkbox" checked={selected} onChange={(e) => setSelectedMembers((v) => ({ ...v, [a.id]: e.target.checked ? [...new Set([...(v[a.id] ?? []), m.id])] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
-                          <span className="font-medium">{m.full_name}</span>
+                          <input type="checkbox" disabled={m.status!=="active"||!!m.archived} checked={selected} onChange={(e) => setSelectedMembers((v) => ({ ...v, [a.id]: e.target.checked ? [...new Set([...(v[a.id] ?? []), m.id])] : (v[a.id] ?? []).filter((id) => id !== m.id) }))} />
+                          <span className={`font-medium ${m.status==="inactive"?"text-muted-foreground opacity-50":m.status==="archived"||m.archived?"text-muted-foreground opacity-40":""}`}>{isUnavailableDuringProgram(m.id)?<span className="mr-2 text-xs font-semibold text-red-600">INDISPONIBLE</span>:null}{m.full_name}{m.status==="inactive"?" · Inactif":m.status==="archived"||m.archived?" · Archivé":""}</span>
                         </label>
                         {selected ? <div className="ml-6 space-y-3 border-l-2 pl-3 pb-3 text-sm">
                           {hasTravel ? <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={travelling} disabled={setMemberTravel.isPending} onChange={(e) => setMemberTravel.mutate({ mid: m.id, travelling: e.target.checked })} />🚐 En déplacement</label> : null}
@@ -1556,9 +1552,9 @@ export function ProgramParticipationPanel({ programId, assignments, members, pol
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2"><b className="text-sm">Membres à solliciter</b><span className="text-xs text-muted-foreground">{requestDraft.memberIds.length} sélectionné(s)</span></div>
                 <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
-                  {activeMembers.map((m: any) => <label key={m.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50">
-                    <input type="checkbox" checked={requestDraft.memberIds.includes(m.id)} onChange={(e) => setRequestDraft({ ...requestDraft, memberIds: e.target.checked ? [...requestDraft.memberIds, m.id] : requestDraft.memberIds.filter((id) => id !== m.id) })} />
-                    <span>{m.full_name}</span>
+                  {selectableMembers.map((m: any) => <label key={m.id} className={`flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50 ${m.status==="inactive"?"opacity-60":m.status==="archived"||m.archived?"opacity-40":""}`}>
+                    <input type="checkbox" disabled={m.status!=="active"||!!m.archived} checked={requestDraft.memberIds.includes(m.id)} onChange={(e) => setRequestDraft({ ...requestDraft, memberIds: e.target.checked ? [...requestDraft.memberIds, m.id] : requestDraft.memberIds.filter((id) => id !== m.id) })} />
+                    <span>{isUnavailableDuringProgram(m.id)?<span className="mr-2 text-xs font-semibold text-red-600">INDISPONIBLE</span>:null}{m.full_name}{m.status==="inactive"?" · Inactif":m.status==="archived"||m.archived?" · Archivé":""}</span>
                     <span className="ml-auto text-xs text-muted-foreground">{(m.poles ?? []).map((id: string) => poleNames.get(id)).filter(Boolean).join(", ")}</span>
                   </label>)}
                 </div>
