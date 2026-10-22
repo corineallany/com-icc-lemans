@@ -207,7 +207,7 @@ function Sollicitations() {
 
   const allMembers = members.data?.members ?? [];
   const activeMembers = allMembers.filter((m: any) => m.status === "active" && !m.archived && !m.deleted);
-  const listedMembers = allMembers.filter((m:any)=>!m.deleted).slice().sort((a:any,b:any)=>{const rank=(m:any)=>m.status==="active"&&!m.archived?0:m.status==="inactive"?2:3;return rank(a)-rank(b)||String(a.full_name).localeCompare(String(b.full_name),"fr")});
+  const listedMembers = allMembers.filter((m:any)=>!m.deleted).slice().sort((a:any,b:any)=>{const rank=(m:any)=>m.status!=="active"?m.status==="inactive"?2:3:availabilityState(m.id,form.program_id).level==="danger"?1:0;return rank(a)-rank(b)||String(a.full_name).localeCompare(String(b.full_name),"fr")});
   const links = members.data?.links ?? [];
   const activePoles = (poles.data ?? []).filter((p) => !p.archived);
   const allActivePrograms = (programs.data ?? []).filter((p) => !p.archived && !p.deleted);
