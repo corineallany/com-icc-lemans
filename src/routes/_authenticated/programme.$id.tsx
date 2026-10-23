@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell, EmptyState } from "@/components/AppShell";
 import { ProgramFullExport } from "@/components/programs/ProgramFullExport";
@@ -159,7 +160,7 @@ function ProgramSheet() {
   });
   const poleName = new Map((poles.data ?? []).map((p) => [p.id, p.name]));
   const memberName = new Map((members.data?.members ?? []).map((m) => [m.id, m.full_name]));
-  const programTasks = (tasks.data ?? []).filter((t) => t.program_id === id);
+  const programTasks = (tasks.data ?? []).filter((t) => t.program_id === id).sort((a, b) => Number((a as any).sort_order ?? 0) - Number((b as any).sort_order ?? 0) || a.created_at.localeCompare(b.created_at));
   const assignedIds = [...new Set((program?.assignments ?? []).flatMap((a) => a.memberIds))];
   const teamLocation = (mid: string) =>
     ((program as any)?.travel_member_ids ?? []).includes(mid) ? "travel" : "onsite";
@@ -271,12 +272,25 @@ function ProgramSheet() {
     onError: (e: any) => toast.error(e.message || "Impossible de modifier la tâche."),
   });
   const [taskTitle, setTaskTitle] = useState("");
+  const reorderProgramTask = useMutation({
+    mutationFn: async ({ task, neighbor }: { task: Task; neighbor: Task }) => {
+      const table = (supabase as any).from("tasks");
+      const taskOrder = Number((task as any).sort_order ?? 0), neighborOrder = Number((neighbor as any).sort_order ?? 0);
+      const first = await table.update({ sort_order: neighborOrder }).eq("id", task.id);
+      if (first.error) throw first.error;
+      const second = await table.update({ sort_order: taskOrder }).eq("id", neighbor.id);
+      if (second.error) throw second.error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onError: (e: any) => { toast.error(e.message || "Impossible de réordonner les tâches."); qc.invalidateQueries({ queryKey: ["tasks"] }); },
+  });
   const addTask = useMutation({
     mutationFn: async () => {
       if (!taskTitle.trim()) throw new Error("Saisis le titre de la tâche.");
-      const { error } = await supabase
+      const nextOrder = programTasks.reduce((max, t) => Math.max(max, Number((t as any).sort_order ?? -1)), -1) + 1;
+      const { error } = await (supabase as any)
         .from("tasks")
-        .insert({ title: taskTitle.trim(), program_id: id, status: "todo", priority: "normale" });
+        .insert({ title: taskTitle.trim(), program_id: id, status: "todo", priority: "normale", sort_order: nextOrder });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -301,11 +315,10 @@ function ProgramSheet() {
       const existing = new Set(programTasks.map((t) => t.title.trim().toLowerCase()));
       const fresh = lines.filter((x) => !existing.has(x.toLowerCase()));
       if (!fresh.length) throw new Error("Aucune nouvelle tâche à ajouter.");
-      const { error } = await supabase
+      const firstOrder = programTasks.reduce((max, t) => Math.max(max, Number((t as any).sort_order ?? -1)), -1) + 1;
+      const { error } = await (supabase as any)
         .from("tasks")
-        .insert(
-          fresh.map((title) => ({ title, program_id: id, status: "todo", priority: "normale" })),
-        );
+        .insert(fresh.map((title, index) => ({ title, program_id: id, status: "todo", priority: "normale", sort_order: firstOrder + index })));
       if (error) throw error;
       return fresh.length;
     },
@@ -334,17 +347,17 @@ function ProgramSheet() {
       if (!fresh.length)
         throw new Error("Toutes les tâches choisies existent déjà dans ce programme.");
       const modelPoles = arr(chosenModel.poles);
-      const { error } = await supabase
+      const firstOrder = programTasks.reduce((max, t) => Math.max(max, Number((t as any).sort_order ?? -1)), -1) + 1;
+      const { error } = await (supabase as any)
         .from("tasks")
-        .insert(
-          fresh.map((title) => ({
-            title,
-            program_id: id,
-            pole_id: modelPoles.length === 1 ? modelPoles[0] : null,
-            status: "todo",
-            priority: "normale",
-          })),
-        );
+        .insert(fresh.map((title, index) => ({
+          title,
+          program_id: id,
+          pole_id: modelPoles.length === 1 ? modelPoles[0] : null,
+          status: "todo",
+          priority: "normale",
+          sort_order: firstOrder + index,
+        })));
       if (error) throw error;
       return fresh.length;
     },
@@ -594,18 +607,21 @@ function ProgramSheet() {
                 <EmptyState title="Aucune tâche" />
               ) : (
                 <div className="space-y-2">
-                  {programTasks.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => toggleTask.mutate(t)}
-                      className="flex w-full items-start gap-3 rounded-lg border p-3 text-left"
-                    >
-                      <span>{t.status === "done" ? "☑" : "☐"}</span>
-                      <span>
-                        <b className={t.status === "done" ? "line-through" : ""}>{t.title}</b>
-                      </span>
-                    </button>
-                  ))}
+                  {programTasks.map((t, index) => {
+                    const previous = programTasks[index - 1], next = programTasks[index + 1];
+                    return (
+                      <div key={t.id} className="flex items-center gap-2 rounded-lg border p-3">
+                        <button type="button" onClick={() => toggleTask.mutate(t)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                          <span>{t.status === "done" ? "☑" : "☐"}</span>
+                          <span><b className={t.status === "done" ? "line-through" : ""}>{t.title}</b></span>
+                        </button>
+                        {isStaff ? <div className="flex shrink-0">
+                          <Button type="button" size="icon" variant="ghost" className="size-8" title="Remonter la tâche" aria-label={"Remonter "+t.title} disabled={!previous || reorderProgramTask.isPending} onClick={() => previous && reorderProgramTask.mutate({ task: t, neighbor: previous })}><ArrowUp className="size-4" /></Button>
+                          <Button type="button" size="icon" variant="ghost" className="size-8" title="Descendre la tâche" aria-label={"Descendre "+t.title} disabled={!next || reorderProgramTask.isPending} onClick={() => next && reorderProgramTask.mutate({ task: t, neighbor: next })}><ArrowDown className="size-4" /></Button>
+                        </div> : null}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               {isStaff ? (
