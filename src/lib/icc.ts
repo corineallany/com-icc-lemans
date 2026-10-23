@@ -20,7 +20,7 @@ export function formatDate(value:string|null|undefined){if(!value)return"Date à
 export function formatDateTime(value:string|null|undefined){if(!value)return"—";return new Date(value).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}
 export type Task=Tables["tasks"]["Row"];
 export const availabilityQuery=queryOptions({queryKey:["member-availability"],queryFn:async()=>unwrap(await supabase.from("member_availability").select("id, member_id, starts_at, ends_at, note, status, decided_at, validated_starts_at, validated_ends_at, decision_note").order("starts_at"))});
-export const tasksQuery=queryOptions({queryKey:["tasks"],queryFn:async()=>unwrap(await supabase.from("tasks").select("*").order("due_date",{ascending:true}))});
+export const tasksQuery=queryOptions({queryKey:["tasks"],queryFn:async()=>unwrap<any[]>(await (supabase as any).from("tasks").select("*").order("sort_order",{ascending:true}).order("due_date",{ascending:true,nullsFirst:false}).order("created_at",{ascending:true}))});
 export const TASK_STATUS_LABEL:Record<string,string>={todo:"À faire",doing:"En cours",done:"Terminée"}; export const TASK_PRIORITY_LABEL:Record<string,string>={basse:"Basse",normale:"Normale",haute:"Haute"};
 export type ProgramModel=Tables["program_models"]["Row"]; export type ProgramDebrief=Tables["program_debriefs"]["Row"]; export type EvaluationRow=Tables["evaluations"]["Row"];
 export const programModelsQuery=queryOptions({queryKey:["program-models"],queryFn:async()=>unwrap<any[]>(await (supabase as any).from("program_models").select("*").eq("deleted",false).order("name"))});
