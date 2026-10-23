@@ -70,15 +70,19 @@ export function useCurrentRole() {
     queryKey: ["current-role", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const [rolesRes, permsRes, memberRes, settingsRes] = await Promise.all([
+      const [rolesRes, permsRes, memberRes, settingsRes, memberPolesRes, polesRes] = await Promise.all([
         supabase.from("user_roles").select("role, active").eq("user_id", user!.id).eq("active", true),
         supabase.from("role_permissions").select("role, permission"),
         supabase.from("members").select("id, full_name, photo_url").eq("auth_user_id", user!.id).maybeSingle(),
         supabase.from("app_settings").select("supervisor_member_id, adjoint_member_id").eq("id", "main").maybeSingle(),
+        supabase.from("member_poles").select("pole_id, is_referent").eq("member_id", (await supabase.from("members").select("id").eq("auth_user_id", user!.id).maybeSingle()).data?.id ?? ""),
+        supabase.from("poles").select("id, archived, deleted"),
       ]);
 
-      const roles = (rolesRes.data ?? []).map((r) => r.role as AppRole);
       const memberId = memberRes.data?.id ?? null;
+      const activePoleIds = new Set((polesRes.data ?? []).filter((p: any) => !p.archived && !p.deleted).map((p: any) => p.id));
+      const hasActiveReferentPole = (memberPolesRes.data ?? []).some((link: any) => link.is_referent && activePoleIds.has(link.pole_id));
+      const roles = (rolesRes.data ?? []).map((r) => r.role as AppRole).filter((r) => r !== "referent" || hasActiveReferentPole);
       const configuredRole: AppRole | null = memberId && settingsRes.data?.supervisor_member_id === memberId
         ? "responsable"
         : memberId && settingsRes.data?.adjoint_member_id === memberId
