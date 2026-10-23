@@ -85,7 +85,8 @@ function MemberPage() {
   const members = useQuery(membersQuery);
   const poles = useQuery(polesQuery);
   const row = isNew ? null : (members.data?.members ?? []).find((m) => m.id === id) as any;
-  const links = (members.data?.links ?? []).filter((l) => l.member_id === id);
+  const activePoleIds = new Set((poles.data ?? []).filter((p) => !p.archived && !p.deleted).map((p) => p.id));
+  const links = (members.data?.links ?? []).filter((l) => l.member_id === id && activePoleIds.has(l.pole_id));
   const [editing, setEditing] = useState(isNew);
   const [draft, setDraft] = useState<Draft>(blank());
   const [uploading, setUploading] = useState(false);
