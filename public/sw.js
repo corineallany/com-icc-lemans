@@ -18,7 +18,7 @@ function resolveAppUrl(value, fallback = "") {
     if (url.pathname === "/" || url.pathname === "") {
       url.pathname = basePath;
     } else if (!url.pathname.startsWith(basePath)) {
-      url.pathname = basePath + url.pathname.replace(/^\\/+/, "");
+      url.pathname = basePath + url.pathname.split("/").filter(Boolean).join("/");
     }
   }
   return url.href;
