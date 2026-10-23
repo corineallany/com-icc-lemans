@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -212,7 +212,7 @@ function PrayerPage() {
   const observationOf = (memberId: string) => attendanceDraft[memberId]?.observation ?? savedAttendance.find((a: any) => a.member_id === memberId)?.observation ?? "";
   const patchAttendance = (memberId: string, key: string, value: string) => setAttendanceDraft(prev => ({ ...prev, [memberId]: { status: prev[memberId]?.status ?? statusOf(memberId), reason: prev[memberId]?.reason ?? reasonOf(memberId), observation: prev[memberId]?.observation ?? observationOf(memberId), [key]: value } }));
   return (
-    <AppShell title="Prière" subtitle="Sujets, programmes et temps de prière de la COM.">
+    <AppShell title="Prière" subtitle="Sujets, programmes et temps de prière de la COM." actions={<Button asChild size="sm" variant="outline"><Link to="/vie-equipe">Retour à Vie d’équipe</Link></Button>}>
       <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Button variant={prayerTab === "deposer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("deposer")}>Déposer un sujet</Button>
         <Button variant={prayerTab === "creer" ? "default" : "outline"} className="min-h-12 whitespace-normal" onClick={() => setPrayerTab("creer")}>Programmes de prière</Button>
