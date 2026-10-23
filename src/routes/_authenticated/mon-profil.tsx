@@ -52,9 +52,10 @@ function MonProfil() {
   const past = myPrograms.filter((p) => (p.start_date ?? "9999") < today);
   const myAvailability = (availability.data ?? []).filter((a) => a.member_id === memberId);
   const myEvaluations = (evaluations.data ?? []).filter((e) => e.subject_member_id === memberId && e.status === "validated");
-  const myPoles = (members.data?.links ?? []).filter((l) => l.member_id === memberId);
+  const activePoleIds = new Set((poles.data ?? []).filter((p) => !p.archived && !p.deleted).map((p) => p.id));
+  const myPoles = (members.data?.links ?? []).filter((l) => l.member_id === memberId && activePoleIds.has(l.pole_id));
   const referentPoles = myPoles.filter((l) => l.is_referent);
-  const poleName = (id: string) => poles.data?.find((p) => p.id === id)?.name ?? "Pôle";
+  const poleName = (id: string) => poles.data?.find((p) => p.id === id && !p.archived && !p.deleted)?.name ?? "Pôle";
   const myActivity = (audit.data ?? []).filter((a) => a.actor_id === userId || a.actor_name === member?.full_name);
 
   if (!member) {
