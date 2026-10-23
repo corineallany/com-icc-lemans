@@ -159,7 +159,8 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
     availability = useQuery(availabilityQuery);
   const qc = useQueryClient();
   const { member: actor } = useCurrentRole();
-  const [draft, setDraft] = useState<Draft | null>(null);\n  const [programPeriod, setProgramPeriod] = useState<"past" | "today" | "upcoming">("today");
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [programPeriod, setProgramPeriod] = useState<"past" | "today" | "upcoming">("today");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [showAllComMembers, setShowAllComMembers] = useState(false);
   const [globalPoleChoice, setGlobalPoleChoice] = useState<Record<string, string>>({});
