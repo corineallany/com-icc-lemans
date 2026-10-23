@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BellOff, Laptop, MonitorSmartphone, RefreshCw, Smartphone, Trash2 } from "lucide-react";
+import { Bell, BellOff, BellRing, Laptop, MonitorSmartphone, RefreshCw, Smartphone, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +47,7 @@ function MesAppareils() {
   const remove=useMutation({mutationFn:async(row:DeviceRow)=>{const current=row.endpoint===push.currentEndpoint;if(current)await push.disable();const{error}=await db().from("icc_push_subscriptions").delete().eq("id",row.id).eq("user_id",userId);if(error)throw error;if(current){await supabase.auth.signOut();await router.navigate({to:"/auth"})}},onSuccess:()=>qc.invalidateQueries({queryKey:["my-push-devices",userId]})});
   const refresh=()=>qc.invalidateQueries({queryKey:["my-push-devices",userId]});
   const enableCurrent=async()=>{await push.enable();await qc.invalidateQueries({queryKey:["my-push-devices",userId]})};
+  const testPush=useMutation({mutationFn:async()=>{if(!push.currentEndpoint)throw new Error("Aucun abonnement Push détecté sur cet appareil.");const{data,error}=await supabase.functions.invoke("send-push",{body:{action:"test-push",endpoint:push.currentEndpoint}});if(error)throw error;if(!data?.success)throw new Error(data?.error||"Le service n’a pas pu envoyer le test.");return data;}});
   const rawRows=devices.data??[];
   const deviceKey=(row:DeviceRow)=>{const i=deviceInfo(row.user_agent);return `${i.kind}|${i.brand}|${i.model}|${i.browser}`.toLowerCase()};
   const grouped=new Map<string,DeviceRow[]>();
@@ -61,6 +62,7 @@ function MesAppareils() {
           <div className="rounded-xl border border-border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><b className="text-base">{currentInfo.title}</b><p className="mt-1 text-xs text-muted-foreground">Marque : {currentInfo.brand} · Modèle : {currentInfo.model} · Navigateur : {currentInfo.browser}</p></div><Badge variant={currentRow?.enabled&&push.subscribed?"default":"secondary"}>{currentRow?.enabled&&push.subscribed?"Push activé":"Push désactivé"}</Badge></div></div>
           {push.state === "unsupported" ? <p className="text-muted-foreground">Les notifications push ne sont pas supportées sur ce navigateur.</p> : push.state === "denied" ? <p className="text-destructive">Les notifications sont bloquées dans les réglages du navigateur.</p> : currentRow?.enabled&&push.subscribed ? <Button variant="outline" onClick={()=>toggle.mutate({row:currentRow,enabled:false})} disabled={toggle.isPending}><BellOff className="size-4"/> Désactiver les Push</Button> : <Button onClick={currentRow?()=>toggle.mutate({row:currentRow,enabled:true}):enableCurrent} disabled={push.state === "loading"||toggle.isPending}><Bell className="size-4"/> Activer les Push</Button>}
           {push.error ? <p className="text-xs text-destructive">{push.error}</p> : null}
+          {currentRow?.enabled&&push.subscribed ? <div className="space-y-2"><Button variant="outline" onClick={()=>testPush.mutate()} disabled={testPush.isPending}><BellRing className="size-4"/>{testPush.isPending?"Envoi du test…":"M’envoyer une notification test"}</Button>{testPush.isSuccess?<p className="text-xs text-green-700">Test envoyé à cet appareil. Vérifie si la notification apparaît sur ton téléphone.</p>:null}{testPush.error?<p className="text-xs text-destructive">{testPush.error instanceof Error?testPush.error.message:"Impossible d’envoyer le test. Réessaie après avoir actualisé la page."}</p>:null}</div>:null}
         </CardContent>
       </Card>
 
