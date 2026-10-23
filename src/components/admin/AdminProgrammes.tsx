@@ -1,7 +1,7 @@
 import { programError } from "@/lib/program-errors";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive } from "lucide-react";
+import { Archive, CalendarClock, CalendarDays, History } from "lucide-react";
 import { toast } from "sonner";
 import { Field, newId } from "@/components/admin/form-kit";
 import { useCurrentRole } from "@/hooks/useAuth";
@@ -134,7 +134,12 @@ const emptyDraft = (): Draft => ({
   slot_selection_mode: "organizer",
   serviceSlots: [],
 });
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const todayIso = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
+const formatProgramDate = (value?: string | null) =>
+  value ? new Date(`${value}T12:00:00`).toLocaleDateString("fr-FR") : "";
 const dateRange = (start: string, end: string) => {
   const out: string[] = [];
   if (!start) return out;
@@ -154,7 +159,7 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
     availability = useQuery(availabilityQuery);
   const qc = useQueryClient();
   const { member: actor } = useCurrentRole();
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);\n  const [programPeriod, setProgramPeriod] = useState<"past" | "today" | "upcoming">("today");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [showAllComMembers, setShowAllComMembers] = useState(false);
   const [globalPoleChoice, setGlobalPoleChoice] = useState<Record<string, string>>({});
@@ -168,6 +173,20 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
     () => (programs.data ?? []).filter((p) => !p.archived && !p.deleted),
     [programs.data],
   );
+  const today = todayIso();
+  const programsByPeriod = useMemo(() => {
+    const past = activePrograms.filter((p) => (p.end_date || p.start_date || "") < today);
+    const todayPrograms = activePrograms.filter((p) => {
+      const start = p.start_date || "";
+      const end = p.end_date || start;
+      return start <= today && end >= today;
+    });
+    const upcoming = activePrograms.filter((p) => (p.start_date || "") > today);
+    const byStart = (a: ProgramWithDetails, b: ProgramWithDetails) =>
+      (a.start_date || "").localeCompare(b.start_date || "") || a.title.localeCompare(b.title, "fr");
+    return { past: [...past].sort((a, b) => byStart(b, a)), today: todayPrograms.sort(byStart), upcoming: upcoming.sort(byStart) };
+  }, [activePrograms, today]);
+  const visiblePrograms = programsByPeriod[programPeriod];
   const activePoles = useMemo(() => (poles.data ?? []).filter((p) => !p.archived), [poles.data]);
   const links = members.data?.links ?? [],
     allMembers = members.data?.members ?? [];
@@ -773,45 +792,100 @@ export function AdminProgrammes({ openNewOnMount = false }: { openNewOnMount?: b
           + Nouveau programme
         </Button>
       </div>
-      <div className="space-y-2">
-        {activePrograms.map((p) => (
-          <div
-            key={p.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3"
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2" role="tablist" aria-label="Classer les programmes par date">
+          <Button
+            type="button"
+            size="sm"
+            variant={programPeriod === "past" ? "default" : "outline"}
+            className="min-w-0 gap-1 px-2"
+            role="tab"
+            aria-selected={programPeriod === "past"}
+            onClick={() => setProgramPeriod("past")}
           >
-            <div>
-              <b>{p.title}</b>
-              {(p as any).response_deadline ? (
+            <History className="size-4 shrink-0" />
+            <span>Passés</span>
+            <span className="text-xs opacity-80">({programsByPeriod.past.length})</span>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={programPeriod === "today" ? "default" : "outline"}
+            className="min-w-0 gap-1 px-2"
+            role="tab"
+            aria-selected={programPeriod === "today"}
+            onClick={() => setProgramPeriod("today")}
+          >
+            <CalendarDays className="size-4 shrink-0" />
+            <span>Aujourd’hui</span>
+            <span className="text-xs opacity-80">({programsByPeriod.today.length})</span>
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={programPeriod === "upcoming" ? "default" : "outline"}
+            className="min-w-0 gap-1 px-2"
+            role="tab"
+            aria-selected={programPeriod === "upcoming"}
+            onClick={() => setProgramPeriod("upcoming")}
+          >
+            <CalendarClock className="size-4 shrink-0" />
+            <span>À venir</span>
+            <span className="text-xs opacity-80">({programsByPeriod.upcoming.length})</span>
+          </Button>
+        </div>
+        <div className="space-y-2">
+          {visiblePrograms.length ? visiblePrograms.map((p) => (
+            <div
+              key={p.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3"
+            >
+              <div className="min-w-0">
+                <b>{p.title}</b>
                 <p className="text-xs text-muted-foreground">
-                  Réponses attendues avant le{" "}
-                  {new Date(`${(p as any).response_deadline}T00:00:00`).toLocaleDateString("fr-FR")}
+                  {formatProgramDate(p.start_date)}
+                  {p.end_date && p.end_date !== p.start_date ? ` – ${formatProgramDate(p.end_date)}` : ""}
                 </p>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => edit(p)}>
-                Modifier
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1"
-                disabled={archive.isPending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Archiver « ${p.title} » ? Le programme quittera la liste active mais restera entièrement restaurable.`,
+                {(p as any).response_deadline ? (
+                  <p className="text-xs text-muted-foreground">
+                    Réponses attendues avant le{" "}
+                    {formatProgramDate((p as any).response_deadline)}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => edit(p)}>
+                  Modifier
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  disabled={archive.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Archiver « ${p.title} » ? Le programme quittera la liste active mais restera entièrement restaurable.`,
+                      )
                     )
-                  )
-                    archive.mutate(p);
-                }}
-              >
-                <Archive className="size-4" />
-                Archiver
-              </Button>
+                      archive.mutate(p);
+                  }}
+                >
+                  <Archive className="size-4" />
+                  Archiver
+                </Button>
+              </div>
             </div>
-          </div>
-        ))}
+          )) : (
+            <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+              {programPeriod === "past"
+                ? "Aucun programme passé."
+                : programPeriod === "today"
+                  ? "Aucun programme prévu aujourd’hui."
+                  : "Aucun programme à venir."}
+            </div>
+          )}
+        </div>
       </div>
       <Dialog
         open={!!draft}
