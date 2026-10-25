@@ -192,10 +192,17 @@ function Modeles() {
         if (error) throw error;
       }
       setDraft((current) => (current ? { ...current, id: modelId } : current));
-      if (dates.length) {
+      if (!v.id && dates.length) {
+        // La génération automatique ne concerne que la création d'un nouveau modèle.
         const { error } = await (supabase as any).rpc("generate_model_programs", {
           p_model_id: modelId,
           p_dates: dates,
+        });
+        if (error) throw error;
+      } else if (v.id) {
+        // Une modification synchronise les occurrences existantes sans en créer de nouvelles.
+        const { error } = await (supabase as any).rpc("sync_program_model_occurrences", {
+          p_model_id: modelId,
         });
         if (error) throw error;
       }
@@ -208,7 +215,7 @@ function Modeles() {
       });
     },
     onSuccess: () => {
-      toast.success("Modèle enregistré et planning actualisé");
+      toast.success(v.id ? "Modèle modifié : occurrences existantes actualisées" : "Modèle enregistré et planning actualisé");
       setDraft(null);
       refresh();
       qc.invalidateQueries({ queryKey: ["programs"] });
