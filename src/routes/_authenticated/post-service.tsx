@@ -439,19 +439,20 @@ function PostService() {
     });
     for (const row of rows) if (!presences.some((p) => p.member_id === row.member_id)) { const r:any=row; presences.push({ member_id: r.member_id, presence: r.presence, arrival_time: r.arrival_time ?? "", departure_time: r.departure_time ?? "", justified: r.justified ?? null, justification_reason: r.justification_reason ?? "", note: r.note ?? "" }); }
     const auto = autoSynthesis(programId);
+    const mergeText = (existing: string | null | undefined, generated: string | null | undefined) => Array.from(new Set([existing, generated].flatMap((v) => (v ?? "").split("\\n").map((line) => line.trim()).filter(Boolean)))).join("\\n");
     setGlobalDraft({
       id: debrief?.id ?? null,
       program_id: programId,
-      summary: debrief?.summary ?? auto.summary,
-      went_well: debrief?.went_well ?? auto.went_well,
-      to_improve: debrief?.to_improve ?? auto.to_improve,
+      summary: mergeText(debrief?.summary, auto.summary),
+      went_well: mergeText(debrief?.went_well, auto.went_well),
+      to_improve: mergeText(debrief?.to_improve, auto.to_improve),
       attendance_note: debrief?.attendance_note ?? "",
       rating: debrief?.rating ?? auto.rating,
       actual_start: debrief?.actual_start ?? "",
       actual_end: debrief?.actual_end ?? "",
       completion: debrief?.completion ?? "total",
-      difficulties: debrief?.difficulties ?? auto.difficulties,
-      needs: debrief?.needs ?? auto.needs,
+      difficulties: mergeText(debrief?.difficulties, auto.difficulties),
+      needs: mergeText(debrief?.needs, auto.needs),
       to_direction: debrief?.to_direction ?? auto.to_direction,
       incidents: debrief ? decodeIncidents(debrief.incident_type, debrief.incident_detail) : auto.incidents,
       presences,
