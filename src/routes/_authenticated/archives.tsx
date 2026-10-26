@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArchiveRestore, RotateCcw, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell, EmptyState } from "@/components/AppShell";
@@ -41,6 +41,17 @@ function Archives() {
   const [view, setView] = useState<"archived" | "deleted">("archived");
   const [term, setTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | TableName>("all");
+  const [targetId, setTargetId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedView = params.get("view");
+    const requestedEntity = params.get("entity");
+    const requestedId = params.get("id");
+    if (requestedView === "archived" || requestedView === "deleted") setView(requestedView);
+    if (requestedEntity && FILTERS.some((f) => f.value === requestedEntity)) setTypeFilter(requestedEntity as TableName);
+    if (requestedId) setTargetId(requestedId);
+  }, []);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const permissions = useQuery({
@@ -80,7 +91,7 @@ function Archives() {
     ...(prayerSubjects.data ?? []).map((s: any) => ({ key: `prayer_subjects-${s.id}`, id: s.id, table: "prayer_subjects" as const, label: s.title, detail: `Sujet de prière · ${s.category ?? "Autre"}`, state: s.deleted_at ? "deleted" as const : "archived" as const })),
   ], [programs.data, solicitations.data, members.data, poles.data, models.data, taskTemplateModels.data, teamLife.data, trainingTrash.data, prayerPrograms.data, prayerSubjects.data]);
 
-  const visible = useMemo(() => { const q = term.trim().toLowerCase(); return entries.filter((e) => e.state === view && (typeFilter === "all" || e.table === typeFilter) && (!q || `${e.label} ${e.detail} ${TABLE_LABEL[e.table]}`.toLowerCase().includes(q))); }, [entries, view, typeFilter, term]);
+  const visible = useMemo(() => { const q = term.trim().toLowerCase(); return entries.filter((e) => e.state === view && (typeFilter === "all" || e.table === typeFilter) && (!targetId || e.id === targetId) && (!q || `${e.label} ${e.detail} ${TABLE_LABEL[e.table]}`.toLowerCase().includes(q))); }, [entries, view, typeFilter, term]);
   const selectedEntries = visible.filter((entry) => selected.has(entry.key));
   const allSelected = visible.length > 0 && visible.every((entry) => selected.has(entry.key));
 
