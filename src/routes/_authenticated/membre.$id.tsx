@@ -96,7 +96,7 @@ function MemberPage() {
   const [statusReason, setStatusReason] = useState("");
 
   const poleNames = useMemo(() => new Map((poles.data ?? []).map((p) => [p.id, p.name])), [poles.data]);
-  const activePoles = useMemo(() => (poles.data ?? []).filter((p) => !p.archived), [poles.data]);
+  const activePoles = useMemo(() => (poles.data ?? []).filter((p) => !p.archived && !p.deleted), [poles.data]);
 
   useEffect(() => {
     if (!row) return;
