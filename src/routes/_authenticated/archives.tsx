@@ -106,7 +106,9 @@ function Archives() {
       const rpc = entry.table === "prayer_subjects" ? "prayer_archive_subject" : "prayer_archive_program";
       const { error: rpcError } = await db().rpc(rpc, { p_id: entry.id, p_destination: destination });
       error = rpcError;
-    } else if (entry.table === "task_template_models") {\n      ({ error } = await db().from("task_template_models").update(destination === "active" ? { archived: false, deleted: false } : destination === "archived" ? { archived: true, deleted: false } : { archived: true, deleted: true }).eq("id", entry.id));\n    } else if (entry.table === "members") {
+    } else if (entry.table === "task_template_models") {
+      ({ error } = await db().from("task_template_models").update(destination === "active" ? { archived: false, deleted: false } : destination === "archived" ? { archived: true, deleted: false } : { archived: true, deleted: true }).eq("id", entry.id));
+    } else if (entry.table === "members") {
       ({ error } = await db().from("members").update(destination === "active" ? { status: "active", deleted: false } : { status: "archived", deleted: destination === "deleted" }).eq("id", entry.id));
     } else {
       ({ error } = await db().from(entry.table).update(destination === "active" ? { archived: false, deleted: false } : { archived: true, deleted: destination === "deleted" }).eq("id", entry.id));
