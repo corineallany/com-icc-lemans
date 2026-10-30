@@ -497,7 +497,7 @@ function ProgramSheet() {
               <Info
                 label="Pôles mobilisés"
                 value={
-                  program.assignments.map((a) => poleName.get(a.pole_id) ?? "?").join(", ") || "—"
+                  program.assignments.map((a) => poleName.get(a.pole_id) ?? "").join(", ") || "—"
                 }
               />
               {program.description ? (
@@ -672,7 +672,7 @@ function ProgramSheet() {
               {actualTeamMembers.length ? actualTeamMembers.map((mid) => {
                 const memberAssignments = actualAssignments.filter((r: any) => r.member_id === mid);
                 const poleIds = [...new Set(memberAssignments.map((r: any) => (program.assignments ?? []).find((a) => a.id === r.assignment_id)?.pole_id).filter(Boolean))] as string[];
-                const poleLabels = poleIds.map((poleId) => poleName.get(poleId) ?? "Pôle");
+                const poleLabels = poleIds.map((poleId) => poleName.get(poleId)).filter((name): name is string => !!name);
                 const linkedSlots = [...new Map(memberAssignments.flatMap((r: any) => slotsForAssignmentMember(r.id)).map((slot: any) => [slot.id, slot])).values()];
                 const tasks = [...new Set(memberAssignments.map((r: any) => (program.assignments ?? []).find((a) => a.id === r.assignment_id)?.tasks).filter(Boolean))];
                 const modes = [...new Set(memberAssignments.map((r: any) => r.assignment_mode === "direct" ? "Affectation directe" : "Proposition acceptée"))];
@@ -682,7 +682,7 @@ function ProgramSheet() {
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <b>{memberName.get(mid) ?? mid}</b>
-                        <p className="text-sm text-muted-foreground">{poleLabels.join(", ") || "Pôle non précisé"}</p>
+                        <p className="text-sm text-muted-foreground">{poleLabels.join(", ")}</p>
                         <p className="text-xs text-muted-foreground">{modes.join(" · ")}</p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
