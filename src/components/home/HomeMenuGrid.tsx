@@ -6,6 +6,7 @@ type Item={key:string;icon:string;title:string;desc:string;to:string;tone?:"defa
 const ITEMS:Item[]=[
  {key:"planning",icon:"📅",title:"Planning",desc:"Calendrier général et liste chronologique.",to:"/planning"},
  {key:"programmes",icon:"☑️",title:"Programmes",desc:"Statuts, dates, pôles et personnes mobilisées.",to:"/programmes"},
+ {key:"services_autonomes",icon:"🔄",title:"Service autonome",desc:"Modèles, périodes personnalisées et positionnements indépendants des programmes.",to:"/services-autonomes"},
  {key:"trombinoscope",icon:"👥",title:"Trombinoscope",desc:"Membres, rôles, pôles et intégration.",to:"/trombinoscope"},
  {key:"formations",icon:"🎓",title:"Formations",desc:"Parcours par pôle, progression et validations.",to:"/formations"},
  {key:"sollicitations",icon:"🤝",title:"Demandes ponctuelles",desc:"Renfort, ajout ou remplacement ponctuel.",to:"/sollicitations"},
