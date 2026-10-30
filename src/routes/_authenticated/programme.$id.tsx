@@ -102,7 +102,9 @@ function ProgramSheet() {
       return data ?? [];
     },
   });
-  const program = (programs.data ?? []).find((p) => p.id === id);
+  const foundProgram = (programs.data ?? []).find((p) => p.id === id);
+  const activePoleIds = new Set((poles.data ?? []).filter((p) => !p.archived && !p.deleted).map((p) => p.id));
+  const program = foundProgram ? { ...foundProgram, assignments: foundProgram.assignments.filter((a) => activePoleIds.has(a.pole_id)) } : undefined;
   const participationModes = useQuery({
     queryKey: [
       "program-sheet-participation-modes",
