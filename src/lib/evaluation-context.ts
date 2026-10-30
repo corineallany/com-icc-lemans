@@ -43,6 +43,7 @@ export type EvaluationFacts = {
     responsesAnswered: number;
     responsesTotal: number;
   };
+  autonomous: { assigned: number; completed: number; contributions: number; periods: Array<{ title: string; status: string }> };
   postService: {
     incidentsExplicitlyLinked: number;
     positiveProgramNotes: number;
@@ -79,7 +80,7 @@ function decodeIncidents(detail: string | null | undefined) {
 }
 
 export async function getEvaluationFacts(memberId: string, periodStart: string, periodEnd: string): Promise<EvaluationFacts> {
-  const [programRes, assignmentRes, assignmentMemberRes, attendanceRes, debriefRes, memberPoleRes, poleRes, pathRes, stepRes, memberPathRes, solicitationRes, solicitationRecipientRes] = await Promise.all([
+  const [programRes, assignmentRes, assignmentMemberRes, attendanceRes, debriefRes, memberPoleRes, poleRes, pathRes, stepRes, memberPathRes, solicitationRes, solicitationRecipientRes, memberIdentityRes, autonomousPeriodsRes] = await Promise.all([
     db().from("programs").select("id,title,start_date,status").gte("start_date", periodStart).lte("start_date", periodEnd).eq("deleted", false),
     db().from("program_assignments").select("id,program_id,pole_id,required_count"),
     db().from("program_assignment_members").select("assignment_id,member_id"),
@@ -92,11 +93,33 @@ export async function getEvaluationFacts(memberId: string, periodStart: string, 
     db().from("member_training_paths").select("id,member_id,path_id,status,started_at,completed_at").eq("member_id", memberId),
     db().from("solicitations").select("id,event_date,status,deleted,cancelled_at").gte("event_date", periodStart).lte("event_date", periodEnd).eq("deleted", false),
     db().from("solicitation_recipients").select("solicitation_id,member_id,response,responded_at,selected").eq("member_id", memberId),
+    db().from("members").select("auth_user_id").eq("id", memberId).maybeSingle(),
+    db().from("autonomous_service_periods").select("id,title,starts_on,ends_on,status,model_id").lte("starts_on",periodEnd).gte("ends_on",periodStart).neq("status","archived"),
   ]);
 
-  for (const result of [programRes, assignmentRes, assignmentMemberRes, attendanceRes, debriefRes, memberPoleRes, poleRes, pathRes, stepRes, memberPathRes, solicitationRes, solicitationRecipientRes]) {
+  for (const result of [programRes, assignmentRes, assignmentMemberRes, attendanceRes, debriefRes, memberPoleRes, poleRes, pathRes, stepRes, memberPathRes, solicitationRes, solicitationRecipientRes, memberIdentityRes, autonomousPeriodsRes]) {
     if (result.error) throw new Error(result.error.message);
   }
+
+  const autonomousPeriods = autonomousPeriodsRes.data ?? [];
+  const autonomousPeriodIds = autonomousPeriods.map((p: any) => p.id);
+  const autonomousAssignmentsRes = autonomousPeriodIds.length && memberIdentityRes.data?.auth_user_id
+    ? await db().from("autonomous_service_assignments").select("id,period_id,status").eq("user_id",memberIdentityRes.data.auth_user_id).in("period_id",autonomousPeriodIds).in("status",["confirmed","completed","replaced"])
+    : {data:[],error:null};
+  if (autonomousAssignmentsRes.error) throw new Error(autonomousAssignmentsRes.error.message);
+  const autonomousAssignmentRows = autonomousAssignmentsRes.data ?? [];
+  const autonomousDebriefsRes = autonomousPeriodIds.length
+    ? await db().from("autonomous_service_debriefs").select("id,period_id,status").in("period_id",autonomousPeriodIds)
+    : {data:[],error:null};
+  if (autonomousDebriefsRes.error) throw new Error(autonomousDebriefsRes.error.message);
+  const autonomousDebriefIds = (autonomousDebriefsRes.data ?? []).map((d:any)=>d.id);
+  const autonomousContributionsRes = autonomousDebriefIds.length
+    ? await db().from("autonomous_service_contributions").select("id,debrief_id,user_id").in("debrief_id",autonomousDebriefIds).eq("user_id",memberIdentityRes.data?.auth_user_id ?? "")
+    : {data:[],error:null};
+  if (autonomousContributionsRes.error) throw new Error(autonomousContributionsRes.error.message);
+  const assignedAutonomousPeriods = new Set(autonomousAssignmentRows.map((a:any)=>a.period_id));
+  const completedAutonomousPeriods = new Set(autonomousPeriods.filter((p:any)=>p.status==="completed").map((p:any)=>p.id));
+  const autonomousFacts = { assigned: assignedAutonomousPeriods.size, completed: [...assignedAutonomousPeriods].filter((id:string)=>completedAutonomousPeriods.has(id)).length, contributions: (autonomousContributionsRes.data??[]).length, periods: autonomousPeriods.filter((p:any)=>assignedAutonomousPeriods.has(p.id)).map((p:any)=>({title:p.title,status:p.status})) };
 
   const programs = (programRes.data ?? []).filter((p: any) => p.status !== "cancelled");
   const periodProgramIds = new Set(programs.map((p: any) => p.id));
@@ -235,6 +258,7 @@ export async function getEvaluationFacts(memberId: string, periodStart: string, 
       responsesAnswered: answered,
       responsesTotal: solicitationResponses.length,
     },
+    autonomous: autonomousFacts,
     postService: {
       incidentsExplicitlyLinked: linkedIncidents,
       positiveProgramNotes: relevantDebriefs.filter((d: any) => !!d.went_well?.trim()).length,
