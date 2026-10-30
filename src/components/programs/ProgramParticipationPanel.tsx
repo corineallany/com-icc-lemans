@@ -49,7 +49,10 @@ const proposalLabel: Record<string, string> = {
   covered: "Besoin comblé",
 };
 
-export function ProgramParticipationPanel({ programId, assignments, members, poles }: Props) {
+export function ProgramParticipationPanel({ programId, assignments: allAssignments, members, poles }: Props) {
+  // Un pôle archivé/supprimé ne doit plus générer de besoins ni de sollicitations actives.
+  const activePoleIds = new Set(poles.filter((p) => !p.archived && !p.deleted).map((p) => p.id));
+  const assignments = allAssignments.filter((assignment) => activePoleIds.has(assignment.pole_id));
   const { member, isStaff } = useCurrentRole();
 
   const qc = useQueryClient();
