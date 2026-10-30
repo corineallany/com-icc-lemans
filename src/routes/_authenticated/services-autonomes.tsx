@@ -21,7 +21,7 @@ function ServicesAutonomes() {
  const qc=useQueryClient(), {userId,isAdmin,isStaff}=useCurrentRole(), poles=useQuery(polesQuery);
  const [editing,setEditing]=useState<Model|null>(null), [name,setName]=useState(""), [poleId,setPoleId]=useState(""), [description,setDescription]=useState(""), [objectives,setObjectives]=useState(""), [instructions,setInstructions]=useState(""), [people,setPeople]=useState("1");
  const [periodModel,setPeriodModel]=useState<Model|null>(null), [periodTitle,setPeriodTitle]=useState(""), [start,setStart]=useState(today()), [end,setEnd]=useState(today()), [periodObjectives,setPeriodObjectives]=useState(""), [dateRows,setDateRows]=useState([{label:"Période",start:today(),end:today(),startTime:"09:00",endTime:"18:00",people:"1"}]);
- const [selectedPeriod,setSelectedPeriod]=useState<string|null>(null);
+ const [selectedPeriod,setSelectedPeriod]=useState<string|null>(()=>new URLSearchParams(window.location.search).get("periodId"));
  const models=useQuery({queryKey:["autonomous-service-models"],queryFn:async()=>{const {data,error}=await (supabase as any).from("autonomous_service_models").select("*").order("name");if(error)throw error;return data as Model[]}});
  const periods=useQuery({queryKey:["autonomous-service-periods"],queryFn:async()=>{const {data,error}=await (supabase as any).from("autonomous_service_periods").select("*").order("starts_on",{ascending:false});if(error)throw error;return data as Period[]}});
  const slots=useQuery({queryKey:["autonomous-service-slots",selectedPeriod],enabled:!!selectedPeriod,queryFn:async()=>{const {data,error}=await (supabase as any).from("autonomous_service_slots").select("*").eq("period_id",selectedPeriod).order("sort_order");if(error)throw error;return data??[]}});
