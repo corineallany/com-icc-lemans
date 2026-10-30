@@ -198,10 +198,15 @@ export function ProgramParticipationPanel({ programId, assignments: allAssignmen
     queryKey: ["my-program-poles", member?.id],
     enabled: !!member?.id,
     queryFn: async () => {
+      // Les anciens rattachements restent en base pour l'historique, mais un pôle
+      // archivé/supprimé ne doit plus autoriser de nouvelles propositions.
+      const activeIds = [...activePoleIds];
+      if (!activeIds.length) return new Set<string>();
       const { data, error } = await (supabase as any)
         .from("member_poles")
         .select("pole_id")
-        .eq("member_id", member!.id);
+        .eq("member_id", member!.id)
+        .in("pole_id", activeIds);
       if (error) throw error;
       return new Set((data ?? []).map((x: any) => x.pole_id));
     },
