@@ -34,6 +34,7 @@ function Programmes() {
   const today = new Date().toISOString().slice(0, 10);
   const poleName = useMemo(() => new Map((poles.data ?? []).map(p => [p.id, p.name])), [poles.data]);
   const memberName = useMemo(() => new Map((members.data?.members ?? []).map(m => [m.id, m.full_name])), [members.data]);
+  const activePoleIds = new Set((poles.data ?? []).filter(p => !p.archived && !p.deleted).map(p => p.id));
   const all = programs.data ?? [];
 
   const inView = (p: any) => view === "all" ? true : view === "archives" ? p.archived : view === "upcoming" ? !p.archived && (p.status === "postponed" || (p.end_date || p.start_date) >= today) : !p.archived && p.status !== "postponed" && (p.end_date || p.start_date) < today;
@@ -88,11 +89,11 @@ function Programmes() {
 
             <div className="mt-4 space-y-2">
               <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Pôles sollicités</p>
-              {program.assignments.length === 0 ? (
+              {program.assignments.filter(a => activePoleIds.has(a.pole_id)).length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aucun pôle mobilisé.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {[...new Set(program.assignments.map((a) => poleName.get(a.pole_id) ?? "Pôle"))].map((name) => (
+                  {[...new Set(program.assignments.filter((a) => activePoleIds.has(a.pole_id)).map((a) => poleName.get(a.pole_id)).filter(Boolean))].map((name) => (
                     <span key={name} className="rounded-md border bg-muted/30 px-2.5 py-1 text-sm font-medium">{name}</span>
                   ))}
                 </div>
