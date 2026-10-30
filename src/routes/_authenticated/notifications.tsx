@@ -62,6 +62,7 @@ function NotificationsPage(){
   // Preserve record-level links produced by notification events.
   if(link.includes("#")||/[?&](taskId|solicitationId|evaluationId|availabilityId|eventId|itemId|programId|stepId|sessionId|memberId)=/.test(link))return link;
   if(n.entity_type==="solicitation"&&n.entity_id)return `/sollicitations?solicitationId=${encodeURIComponent(n.entity_id)}`;
+  if(n.entity_type==="autonomous_service_period"&&n.entity_id)return `/services-autonomes?periodId=${encodeURIComponent(n.entity_id)}`;
   if(n.entity_type==="program"&&n.entity_id){
    const base=`/programme/${n.entity_id}`;
    if(n.type==="reponse_attendue"||/sollicitation|réponse attendue/i.test(`${n.type??""} ${n.title??""}`))return `${base}?tab=infos#program-response`;
